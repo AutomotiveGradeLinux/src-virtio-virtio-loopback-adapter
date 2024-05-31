@@ -49,7 +49,7 @@ size_t get_request_size(VirtQueue *vq, unsigned quota);
 void virtio_rng_set_status(VirtIODevice *vdev, uint8_t status);
 void virtio_rng_process(VirtIORNG *vrng);
 void chr_read(VirtIORNG *vrng, const void *buf, size_t size);
-void virtio_rng_realize(void);
+void virtio_rng_realize(int queue_num, int queue_size);
 void virtio_rng_init(VirtIODevice *vdev);
 
 #endif /* VIRTIO_RNG */

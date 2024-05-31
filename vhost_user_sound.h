@@ -3,7 +3,7 @@
  *
  * Copyright 2020 Red Hat, Inc.
  *
- * Copyright (c) 2023 Virtual Open Systems SAS.
+ * Copyright (c) 2023-2024 Virtual Open Systems SAS.
  *
  * This work is licensed under the terms of the GNU GPL, version 2 or
  * (at your option) any later version.  See the COPYING file in the
@@ -35,6 +35,6 @@ typedef struct VHostUserSound {
     /*< public >*/
 } VHostUserSound;
 
-void vus_device_realize(void);
+void vus_device_realize(int queue_num, int queue_size);
 
 #endif /* VHOST_USER_BLK */

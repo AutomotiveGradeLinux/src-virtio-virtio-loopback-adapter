@@ -29,15 +29,47 @@
 
 /* ----------------------------------------------------------------- */
 
+/*
+ * Example struct for keyboard
+ */
+static struct virtio_input_config virtio_keyboard_config[] = {
+    {
+        .select    = VIRTIO_INPUT_CFG_ID_NAME,
+        .size      = sizeof(VIRTIO_ID_NAME_KEYBOARD),
+        .u.string  = VIRTIO_ID_NAME_KEYBOARD,
+    },{
+        .select    = VIRTIO_INPUT_CFG_ID_DEVIDS,
+        .size      = sizeof(struct virtio_input_devids),
+        .u.ids     = {
+            .bustype = (BUS_VIRTUAL),
+            .vendor  = (0x0627), /* same we use for usb hid devices */
+            .product = (0x0001),
+            .version = (0x0001),
+        },
+    },{
+        .select    = VIRTIO_INPUT_CFG_EV_BITS,
+        .subsel    = EV_KEY,
+        .size      = 1,
+        .u.bitmap  = {
+             KEY_G,
+        },
+    },
+    {}, /* End of list */
+};
+
+
 void virtio_input_send(VirtIOInput *vinput, virtio_input_event *event)
 {
     DBG("virtio_input_send() not yet implemeted\n");
+    (void)vinput;
+    (void)event;
 }
 
 static void virtio_input_handle_evt(VirtIODevice *vdev, VirtQueue *vq)
 {
-    DBG("virtio_input_handle_evt(...)\n");
-    /* nothing */
+    DBG("virtio_input_handle_evt(...) not yet implemeted\n");
+    (void)vdev;
+    (void)vq;
 }
 
 static void virtio_input_handle_sts(VirtIODevice *vdev, VirtQueue *vq)
@@ -49,6 +81,7 @@ static void virtio_input_handle_sts(VirtIODevice *vdev, VirtQueue *vq)
     int len;
 
     DBG("virtio_input_handle_sts(...)\n");
+    (void)vq;
 
     for (;;) {
         elem = virtqueue_pop(vinput->sts, sizeof(VirtQueueElement));
@@ -166,6 +199,9 @@ static void virtio_input_set_config(VirtIODevice *vdev,
 static uint64_t virtio_input_get_features(VirtIODevice *vdev, uint64_t f)
 {
     DBG("virtio_input_get_features(...)\n");
+    (void)vdev;
+    (void)f;
+
     return f;
 }
 
@@ -202,22 +238,40 @@ static void virtio_input_reset(VirtIODevice *vdev)
     }
 }
 
-static int virtio_input_post_load(void *opaque, int version_id)
-{
-    VirtIOInput *vinput = global_vdev->vinput;
-    VirtIOInputClass *vic = global_vdev->vinput->input_class;
-    VirtIODevice *vdev = global_vdev;
+/*
+ * Functions which might be used in the future:
+ *
+ * static int virtio_input_post_load(void *opaque, int version_id)
+ * {
+ *     VirtIOInput *vinput = global_vdev->vinput;
+ *     VirtIOInputClass *vic = global_vdev->vinput->input_class;
+ *     VirtIODevice *vdev = global_vdev;
+ *
+ *     DBG("virtio_input_post_load(...)\n");
+ *     (void)opaque;
+ *     (void)version_id;
+ *
+ *     vinput->active = vdev->status & VIRTIO_CONFIG_S_DRIVER_OK;
+ *     if (vic->change_active) {
+ *         vic->change_active(vinput);
+ *     }
+ *     return 0;
+ * }
+ *
+ * static void virtio_input_finalize(VirtIODevice *vdev)
+ * {
+ *     DBG("virtio_input_finalize not yet implemented");
+ *     (void)vdev;
+ * }
+ *
+ * static void virtio_input_device_unrealize(VirtIODevice *vdev)
+ * {
+ *     DBG("virtio_input_device_unrealize not yet implemented");
+ *     (void)vdev;
+ * }
+ */
 
-    DBG("virtio_input_post_load(...)\n");
-
-    vinput->active = vdev->status & VIRTIO_CONFIG_S_DRIVER_OK;
-    if (vic->change_active) {
-        vic->change_active(vinput);
-    }
-    return 0;
-}
-
-void virtio_input_device_realize()
+void virtio_input_device_realize(int queue_num, int queue_size)
 {
     VirtIODevice *vdev = global_vdev;
     struct VirtIOInputClass *vic = vdev->vinput->input_class;
@@ -225,6 +279,8 @@ void virtio_input_device_realize()
     VirtIOInputConfig *cfg;
 
     DBG("virtio_input_device_realize(...)\n");
+    (void)queue_num;
+    (void)queue_size;
 
     /* This needs to be added */
     proxy = (VirtIOMMIOProxy *)malloc(sizeof(VirtIOMMIOProxy));
@@ -258,17 +314,6 @@ void virtio_input_device_realize()
 
     DBG("global_vdev->guest_features: 0x%lx\n", global_vdev->guest_features);
 }
-
-static void virtio_input_finalize(VirtIODevice *vdev)
-{
-    DBG("virtio_input_finalize not yet implemented");
-}
-
-static void virtio_input_device_unrealize(VirtIODevice *vdev)
-{
-    DBG("virtio_input_device_unrealize not yet implemented");
-}
-
 
 void virtio_input_class_init(VirtIODevice *vdev)
 {

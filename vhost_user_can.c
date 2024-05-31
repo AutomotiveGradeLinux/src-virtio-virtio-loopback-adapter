@@ -5,7 +5,7 @@
  * https://github.com/OpenSynergy/qemu/tree/virtio-can-spec-rfc-v3
  *
  * Copyright (C) 2021-2023 OpenSynergy GmbH
- * Copyright (c) 2023 Virtual Open Systems SAS.
+ * Copyright (c) 2023-2024 Virtual Open Systems SAS.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -73,7 +73,7 @@ static void vhost_user_can_start(VirtIODevice *vdev)
     VHostUserCan *vhucan = vdev->vhucan;
     VirtioBus *k = vdev->vbus;
     int ret;
-    int i;
+    unsigned int i;
 
     DBG("vhost_user_can_start(...)\n");
 
@@ -111,9 +111,6 @@ static void vhost_user_can_start(VirtIODevice *vdev)
         vhost_virtqueue_mask(vhucan->vhost_dev, vdev, i, false);
     }
 
-    /* Wait a bit for the vrings to be set in vhost-user-device */
-    sleep(1);
-
     return;
 
 err_guest_notifiers:
@@ -125,6 +122,7 @@ err_host_notifiers:
 static void vhost_user_can_stop(VirtIODevice *vdev)
 {
     DBG("vhost_user_can_stop: not yet implemented\n");
+    (void)vdev;
 }
 
 static void vhost_user_can_set_status(VirtIODevice *vdev, uint8_t status)
@@ -162,6 +160,8 @@ static void vhost_user_can_can_handle_output(VirtIODevice *vdev, VirtQueue *vq)
      * however virtio's cleanup path can call this.
      */
     DBG("vhost_user_can_can_handle_output: Not yet implemented!\n");
+    (void)vdev;
+    (void)vq;
 }
 
 /*
@@ -199,12 +199,14 @@ const VhostDevConfigOps can_config_ops = {
 
 static void vhost_user_can_init(VirtIODevice *vdev);
 
-void vhost_user_can_realize()
+void vhost_user_can_realize(int queue_num, int queue_size)
 {
     VirtIODevice *vdev = global_vdev;
     int ret;
 
     DBG("vhost_user_can_device_realize\n");
+    (void)queue_num;
+    (void)queue_size;
 
     /* This needs to be added */
     proxy = (VirtIOMMIOProxy *)malloc(sizeof(VirtIOMMIOProxy));
@@ -272,22 +274,27 @@ vhost_dev_init_failed:
 static void vhost_user_can_device_unrealize(VirtIODevice *vdev)
 {
     DBG("vhost_user_blk_device_unrealize not yet implemented\n");
+    (void)vdev;
 }
 
-static struct vhost_dev *vhost_user_can_get_vhost(VirtIODevice *vdev)
-{
-    VHostUserCan *vhucan = vdev->vhucan;
-    return vhucan->vhost_dev;
-}
+/* This funciton might be useful in the future
+ *
+ * static struct vhost_dev *vhost_user_can_get_vhost(VirtIODevice *vdev)
+ * {
+ *     VHostUserCan *vhucan = vdev->vhucan;
+ *     return vhucan->vhost_dev;
+ * }
+ *
+ */
 
 static void print_config_can(uint8_t *config_data)
 {
     struct virtio_can_config *config_strct =
         (struct virtio_can_config *)config_data;
 
+    (void)config_strct;
     DBG("print_config_can:\n");
 
-    /* # of available physical jacks */
     DBG("\tuint16_t status: %u\n", config_strct->status);
 }
 
@@ -312,7 +319,7 @@ static void vhost_user_can_init(VirtIODevice *vdev)
 
     VHostUserCan *vhucan = (VHostUserCan *)malloc(sizeof(VHostUserCan));
     vdev->vhucan = vhucan;
-    vdev->nvqs = &vdev->vhdev->nvqs;
+    vdev->nvqs = (int *)&vdev->vhdev->nvqs;
     vhucan->parent = vdev;
     vhucan->virtqs = vdev->vqs;
     vhucan->vhost_dev = vdev->vhdev;

@@ -18,10 +18,9 @@
 # Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 
-#CFLAGS := -Wall -Wextra -Werror
-#CFLAGS := -Wall -Wextra -Wno-unused-variable -Wno-unused-function
-CFLAGS := -Wno-unused-variable -Wno-unused-function -D_GNU_SOURCE
-CFLAGS = -D_GNU_SOURCE -O2
+#CFLAGS := -Wno-unused-variable -Wno-unused-function -D_GNU_SOURCE
+CFLAGS = -D_GNU_SOURCE -O2 -Wall -Wextra -Werror
+
 CC ?=
 
 ifeq ($(ARCH), arm64)

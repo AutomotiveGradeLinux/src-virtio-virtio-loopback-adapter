@@ -64,8 +64,7 @@ void chr_read(VirtIORNG *vrng, const void *buf, size_t size)
 {
     VirtIODevice *vdev = vrng->parent_obj;
     VirtQueueElement *elem;
-    size_t len;
-    int offset;
+    size_t len, offset;
 
     if (!is_guest_ready(vrng)) {
         return;
@@ -136,6 +135,7 @@ void virtio_rng_process(VirtIORNG *vrng)
 
 void handle_input(VirtIODevice *vdev, VirtQueue *vq)
 {
+    (void)vq;
     virtio_rng_process(vdev->vrng);
 }
 
@@ -159,8 +159,11 @@ void virtio_rng_init(VirtIODevice *vdev)
 }
 
 
-void virtio_rng_realize(void)
+void virtio_rng_realize(int queue_num, int queue_size)
 {
+    (void)queue_num;
+    (void)queue_size;
+
     /* prepare procy and virtio dev*/
     proxy = (VirtIOMMIOProxy *)malloc(sizeof(VirtIOMMIOProxy));
 

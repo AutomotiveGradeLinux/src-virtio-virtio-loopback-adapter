@@ -39,6 +39,6 @@ typedef struct VHostUserRNG {
     bool connected;
 } VHostUserRNG;
 
-void vhost_user_rng_realize(void);
+void vhost_user_rng_realize(int queue_num, int queue_size);
 
 #endif /* VHOST_USER_RNG */

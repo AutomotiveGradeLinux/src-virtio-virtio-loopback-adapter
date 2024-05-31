@@ -77,25 +77,27 @@ static void vu_rng_start(VirtIODevice *vdev)
      * everything here. virtio-pci will do the right thing by
      * enabling/disabling irqfd.
      */
-    for (i = 0; i < rng->vhost_dev->nvqs; i++) {
+    for (i = 0; i < (int)rng->vhost_dev->nvqs; i++) {
         vhost_virtqueue_mask(rng->vhost_dev, vdev, i, false);
     }
-
-    /* Wait a bit for the vrings to be set in vhost-user-device */
-    sleep(1);
-
 }
 
-/* TODO: We need to implement this function in a future release */
-static void vu_rng_stop(VirtIODevice *vdev)
-{
-    VHostUserRNG *rng = vdev->vhrng;
-}
-
+/* To be used in future release
+ *
+ * static void vu_rng_stop(VirtIODevice *vdev)
+ * {
+ *     DBG("vu_rng_stop is not yet implemented\n");
+ *     (void)vdev;
+ * }
+ *
+ */
 
 static uint64_t vu_rng_get_features(VirtIODevice *vdev,
                                     uint64_t requested_features)
 {
+    DBG("vu_rng_get_features is not yet implemented\n");
+    (void)vdev;
+
     /* No feature bits used yet */
     return requested_features;
 }
@@ -105,7 +107,13 @@ static void vu_rng_guest_notifier_mask(VirtIODevice *vdev, int idx, bool mask)
 {
     VHostUserRNG *rng = vdev->vhrng;
 
-    /* vhost_virtqueue_mask(&rng->vhost_dev, vdev, idx, mask); */
+    DBG("vu_rng_guest_notifier_mask is not yet implemented\n");
+    (void)vdev;
+    (void)idx;
+    (void)mask;
+    (void)rng;
+
+    /* ADD: vhost_virtqueue_mask(&rng->vhost_dev, vdev, idx, mask); */
 }
 
 /* TODO: We need to implement this function in a future release */
@@ -113,7 +121,12 @@ static bool vu_rng_guest_notifier_pending(VirtIODevice *vdev, int idx)
 {
     VHostUserRNG *rng = vdev->vhrng;
 
-    /* return vhost_virtqueue_pending(&rng->vhost_dev, idx); */
+    DBG("vu_rng_guest_notifier_pending is not yet implemented\n");
+    (void)vdev;
+    (void)idx;
+    (void)rng;
+
+    /* ADD: return vhost_virtqueue_pending(&rng->vhost_dev, idx); */
     return 1;
 }
 
@@ -151,7 +164,7 @@ void vhost_user_rng_init(VirtIODevice *vdev)
 {
     VHostUserRNG *vhrng = (VHostUserRNG *)malloc(sizeof(VHostUserRNG));
     vdev->vhrng = vhrng;
-    vdev->nvqs = &dev->nvqs;
+    vdev->nvqs = (int *)&dev->nvqs;
     vhrng->parent = vdev;
     vhrng->req_vq = vdev->vq;
     vhrng->vhost_dev = dev;
@@ -162,6 +175,8 @@ void vhost_user_rng_init(VirtIODevice *vdev)
 
 static void vu_rng_handle_output(VirtIODevice *vdev, VirtQueue *vq)
 {
+    (void)vdev;
+    (void)vq;
     /*
      * Not normally called; it's the daemon that handles the queue;
      * however virtio's cleanup path can call this.
@@ -170,8 +185,11 @@ static void vu_rng_handle_output(VirtIODevice *vdev, VirtQueue *vq)
 }
 
 
-void vhost_user_rng_realize(void)
+void vhost_user_rng_realize(int queue_num, int queue_size)
 {
+    (void)queue_num;
+    (void)queue_size;
+
     /* Initiliaze virtio_dev data structures */
     virtio_dev_init(global_vdev, "virtio-rng", 4, 0);
 

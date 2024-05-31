@@ -146,39 +146,12 @@ typedef struct VhostUserInput {
  */
 #define KEY_G           34
 
-static struct virtio_input_config virtio_keyboard_config[] = {
-    {
-        .select    = VIRTIO_INPUT_CFG_ID_NAME,
-        .size      = sizeof(VIRTIO_ID_NAME_KEYBOARD),
-        .u.string  = VIRTIO_ID_NAME_KEYBOARD,
-    },{
-        .select    = VIRTIO_INPUT_CFG_ID_DEVIDS,
-        .size      = sizeof(struct virtio_input_devids),
-        .u.ids     = {
-            .bustype = (BUS_VIRTUAL),
-            .vendor  = (0x0627), /* same we use for usb hid devices */
-            .product = (0x0001),
-            .version = (0x0001),
-        },
-    },{
-        .select    = VIRTIO_INPUT_CFG_EV_BITS,
-        .subsel    = EV_KEY,
-        .size      = 1,
-        .u.bitmap  = {
-             KEY_G,
-        },
-    },
-    {}, /* End of list */
-};
-
 void vhost_user_backend_start(VirtIODevice *vdev);
 void vhost_user_backend_stop(VirtIODevice *vdev);
-
 void virtio_input_init_config(VirtIOInput *vinput,
                               virtio_input_config *config);
 void virtio_input_class_init(VirtIODevice *vdev);
-void virtio_input_device_realize();
-
+void virtio_input_device_realize(int queue_num, int queue_size);
 void vhost_user_input_init(VirtIODevice *vdev);
 void vhost_user_input_realize();
 

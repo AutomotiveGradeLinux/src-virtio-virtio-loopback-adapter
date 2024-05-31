@@ -68,7 +68,8 @@
  */
 int vhost_dev_enable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev)
 {
-    int i, r, e;
+    unsigned int i;
+    int r;
 
     /*
      * We will pass the notifiers to the kernel, make sure that QEMU
@@ -224,7 +225,6 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
                                 struct vhost_virtqueue *vq,
                                 unsigned idx)
 {
-    VirtioBus *vbus = vdev->vbus;
     uint64_t s, l, a;
     int r;
 
@@ -240,21 +240,21 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
     a = virtio_queue_get_desc_addr(vdev, idx);
     if (a == 0) {
         /* Queue might not be ready for start */
-        DBG("Error: Queue (%d) might not be ready for start\n", idx);
+        DBG("Warn: Queue (%d) might not be ready for start\n", idx);
         return 0;
     }
 
     vq->num = state.num = virtio_queue_get_num(vdev, idx);
 
     r = vhost_user_set_vring_num(dev, &state);
-    if (r) {
+    if (r < 0) {
         DBG("vhost_set_vring_num failed\n");
         return r;
     }
 
     state.num = virtio_queue_get_last_avail_idx(vdev, idx);
     r = vhost_user_set_vring_base(dev, &state);
-    if (r) {
+    if (r < 0) {
         DBG("vhost_set_vring_base failed\n");
         return r;
     }
@@ -300,7 +300,7 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
 
     file.fd = event_notifier_get_fd(virtio_queue_get_host_notifier(vvq));
     r = vhost_user_set_vring_kick(&file);
-    if (r) {
+    if (r < 0) {
         DBG("vhost_set_vring_kick failed\n");
         return r;
     }
@@ -350,7 +350,8 @@ static int vhost_dev_set_vring_enable(struct vhost_dev *hdev, int enable)
 /* Host notifiers must be enabled at this point. */
 int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev, bool vrings)
 {
-    int i, r;
+    unsigned int i;
+    int r;
 
     hdev->started = true;
     hdev->vdev = vdev;
@@ -444,9 +445,9 @@ int vhost_dev_set_inflight(struct vhost_dev *dev,
 
     if (inflight->addr) {
         r = vhost_user_set_inflight_fd(dev, inflight);
-        if (r) {
+        if (r < 0) {
             DBG("vhost_set_inflight_fd failed\n");
-            return -1;
+            return r;
         }
     }
 

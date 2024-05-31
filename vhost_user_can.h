@@ -5,7 +5,7 @@
  * https://github.com/OpenSynergy/qemu/tree/virtio-can-spec-rfc-v3
  *
  * Copyright (C) 2021-2023 OpenSynergy GmbH
- * Copyright (c) 2023 Virtual Open Systems SAS.
+ * Copyright (c) 2023-2024 Virtual Open Systems SAS.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -52,6 +52,6 @@ typedef struct VHostUserCan {
     bool support_can_fd;
 } VHostUserCan;
 
-void vhost_user_can_realize(void);
+void vhost_user_can_realize(int queue_num, int queue_size);
 
 #endif /* VHOST_USER_CAN */

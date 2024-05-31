@@ -54,7 +54,8 @@ static int vhost_user_blk_start(VirtIODevice *vdev)
 {
     VHostUserBlk *s = vdev->vhublk;
     VirtioBus *k = vdev->vbus;
-    int i, ret;
+    unsigned int i;
+    int ret;
 
     DBG("vhost_user_blk_start\n");
 
@@ -102,13 +103,14 @@ static int vhost_user_blk_start(VirtIODevice *vdev)
     DBG("After vhost_dev_set_inflight\n");
 
 
-    ret = vhost_dev_start(s->vhost_dev, vdev, false);
+    ret = vhost_dev_start(s->vhost_dev, vdev, true);
     if (ret < 0) {
         DBG("Error starting vhost\n");
         return ret;
     }
 
     s->started_vu = true;
+
 
     DBG("vhost_virtqueue_mask\n");
     /*
@@ -123,11 +125,6 @@ static int vhost_user_blk_start(VirtIODevice *vdev)
     DBG("vhost_user_blk_start return successfully: %d\n", ret);
     return ret;
 
-}
-
-static void vhost_user_blk_stop(VirtIODevice *vdev)
-{
-    DBG("Not yet implemented\n");
 }
 
 static int vhost_user_blk_handle_config_change(struct vhost_dev *dev)
@@ -156,11 +153,9 @@ static int vhost_user_blk_handle_config_change(struct vhost_dev *dev)
     return 0;
 }
 
-
 const VhostDevConfigOps blk_ops = {
     .vhost_dev_config_notifier = vhost_user_blk_handle_config_change,
 };
-
 
 static uint64_t vhost_user_blk_get_features(VirtIODevice *vdev,
                                             uint64_t features)
@@ -205,7 +200,6 @@ static uint64_t vhost_user_blk_get_features(VirtIODevice *vdev,
 static int vhost_user_blk_connect(VirtIODevice *vdev)
 {
     VHostUserBlk *s = vdev->vhublk;
-    int ret = 0;
 
     DBG("vhost_user_blk_connect(...)\n");
 
@@ -213,12 +207,15 @@ static int vhost_user_blk_connect(VirtIODevice *vdev)
         DBG("s->connected\n");
         return 0;
     }
+
     s->connected = true;
     s->vhost_dev->num_queues = s->num_queues;
     s->vhost_dev->nvqs = s->num_queues;
     s->vhost_dev->vqs = s->vhost_vqs;
     s->vhost_dev->vq_index = 0;
     s->vhost_dev->backend_features = 0;
+
+    DBG("s->vhost_dev->nvqs: %d\n", s->vhost_dev->nvqs);
 
     vhost_dev_set_config_notifier(s->vhost_dev, &blk_ops);
 
@@ -235,34 +232,39 @@ static int vhost_user_blk_connect(VirtIODevice *vdev)
     DBG("After init global_vdev->host_features: 0x%lx\n",
                                 global_vdev->host_features);
 
-    /* Restore vhost state */
-    if (virtio_device_started(vdev, vdev->status)) {
-        ret = vhost_user_blk_start(vdev);
-        if (ret < 0) {
-            DBG("vhost_user_blk_start failed\n");
-            return ret;
-        }
-    }
-
     DBG("vhost_user_blk_connect return successfully!\n");
 
     return 0;
 }
 
-static void vhost_user_blk_disconnect(VirtIODevice *dev)
-{
-    DBG("vhost_user_blk_disconnect not yet implemented\n");
-}
-
-static void vhost_user_blk_chr_closed_bh(void *opaque)
-{
-    DBG("vhost_user_blk_chr_closed_bh not yet implemented\n");
-}
-
-static void vhost_user_blk_event(void *opaque)
-{
-    DBG("vhost_user_blk_event not yet implemented");
-}
+/*
+ * These functions will be used in the future:
+ *
+ * static void vhost_user_blk_stop(VirtIODevice *vdev)
+ * {
+ *     DBG("Not yet implemented\n");
+ *     (void)vdev;
+ * }
+ *
+ * static void vhost_user_blk_disconnect(VirtIODevice *dev)
+ * {
+ *     DBG("vhost_user_blk_disconnect not yet implemented\n");
+ *     (void)dev;
+ * }
+ *
+ * static void vhost_user_blk_chr_closed_bh(void *opaque)
+ * {
+ *     DBG("vhost_user_blk_chr_closed_bh not yet implemented\n");
+ *     (void)opaque;
+ * }
+ *
+ * static void vhost_user_blk_event(void *opaque)
+ * {
+ *     DBG("vhost_user_blk_event not yet implemented");
+ *     (void)opaque;
+ * }
+ *
+ */
 
 static int vhost_user_blk_realize_connect(VHostUserBlk *s)
 {
@@ -287,23 +289,33 @@ static int vhost_user_blk_realize_connect(VHostUserBlk *s)
         return ret;
     }
 
+    if (global_vdev->vhublk->config_wce != s->blkcfg.wce) {
+        s->blkcfg.wce = global_vdev->vhublk->config_wce;
+
+        ret = vhost_dev_set_config(s->vhost_dev, (uint8_t *)&s->blkcfg.wce,
+                                   offsetof(struct virtio_blk_config, wce),
+                                   sizeof(s->blkcfg.wce),
+                                   VHOST_SET_CONFIG_TYPE_MASTER);
+        if (ret < 0) {
+            DBG("set device config space failed\n");
+            return ret;
+        }
+    }
+
     return 0;
 }
-
 
 static void vhost_user_blk_device_unrealize(VirtIODevice *vdev)
 {
     DBG("vhost_user_blk_device_unrealize not yet implemented\n");
+    (void)vdev;
 }
 
 static void vhost_user_blk_reset(VirtIODevice *vdev)
 {
     DBG("vhost_user_blk_reset not yet implemented\n");
+    (void)vdev;
 }
-
-static void vhost_user_blk_set_config(VirtIODevice *vdev,
-                                      const uint8_t *config);
-
 
 static void vhost_user_blk_update_config(VirtIODevice *vdev, uint8_t *config)
 {
@@ -334,7 +346,7 @@ static void vhost_user_blk_set_config(VirtIODevice *vdev, const uint8_t *config)
                                offsetof(struct virtio_blk_config, wce),
                                sizeof(blkcfg->wce),
                                VHOST_SET_CONFIG_TYPE_MASTER);
-    if (ret) {
+    if (ret < 0) {
         DBG("set device config space failed\n");
         return;
     }
@@ -382,6 +394,7 @@ static void print_config_blk(uint8_t *config_data)
     struct virtio_blk_config *config_strct =
         (struct virtio_blk_config *)config_data;
 
+    (void)config_strct;
     DBG("uint64_t capacity: %llu\n", config_strct->capacity);
     DBG("uint32_t size_max: %u\n", config_strct->size_max);
     DBG("uint32_t seg_max: %u\n", config_strct->seg_max);
@@ -444,7 +457,7 @@ void vhost_user_blk_init(VirtIODevice *vdev)
 
     VHostUserBlk *vhublk = (VHostUserBlk *)malloc(sizeof(VHostUserBlk));
     vdev->vhublk = vhublk;
-    vdev->nvqs = &dev->nvqs;
+    vdev->nvqs = (int *)&dev->nvqs;
     vhublk->parent = vdev;
     vhublk->virtqs = vdev->vqs;
     vhublk->vhost_dev = dev;
@@ -460,6 +473,8 @@ static void vhost_user_blk_handle_output(VirtIODevice *vdev, VirtQueue *vq)
      * however virtio's cleanup path can call this.
      */
     DBG("vhost_user_blk_handle_output not yet implemented\n");
+    (void)vdev;
+    (void)vq;
 }
 
 void vhost_user_blk_realize(int queue_num, int queue_size)
@@ -483,8 +498,8 @@ void vhost_user_blk_realize(int queue_num, int queue_size)
 
     global_vdev->vhublk->config_wce = 1;
 
+    global_vdev->vhublk->vhost_dev->nvqs = queue_num;
     global_vdev->vhublk->num_queues = queue_num;
-
     global_vdev->vhublk->queue_size = queue_size;
 
     /* NOTE: global_vdev->vqs == vhublk->virtqs */

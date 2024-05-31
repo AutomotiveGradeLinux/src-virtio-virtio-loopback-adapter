@@ -16,7 +16,7 @@
  *
  *  3) vhost.h of QEMU project
  *
- * Copyright 2022-2023 Virtual Open Systems SAS.
+ * Copyright 2022-2024 Virtual Open Systems SAS.
  *
  * This work is licensed under the terms of the GNU GPL, version 2.  See
  * the COPYING file in the top-level directory.
@@ -148,7 +148,7 @@
 #define VIRT_VERSION_LEGACY 1
 #define VIRT_VENDOR 0x554D4551 /* 'QEMU' */
 
-#define VIRTQUEUE_MAX_SIZE 64
+#define VIRTQUEUE_MAX_SIZE 1024
 #define VIRTIO_QUEUE_MAX VIRTQUEUE_MAX_SIZE
 
 #define VIRTIO_NO_VECTOR 0xffff
@@ -536,7 +536,7 @@ typedef struct VirtioDeviceClass {
     void (*set_config)(VirtIODevice *vdev, const uint8_t *config);
     void (*reset)(VirtIODevice *vdev);
     void (*set_status)(VirtIODevice *vdev, uint8_t val);
-    void (*realize)(void);
+    void (*realize)(int queue_num, int queue_size);
     void (*unrealize)(VirtIODevice *vdev);
     /*
      * For transitional devices, this is a bitmap of features

@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2022 Viresh Kumar <viresh.kumar@linaro.org>
  *
- * Copyright (c) 2023 Virtual Open Systems SAS.
+ * Copyright (c) 2023-2024 Virtual Open Systems SAS.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -56,6 +56,7 @@ static void vu_gpio_get_config(VirtIODevice *vdev, uint8_t *config)
     VHostUserGPIO *gpio = dev->vdev->vhugpio;
 
     DBG("vu_gpio_get_config()\n");
+    (void)vdev;
     memcpy(config, &gpio->config, sizeof(gpio->config));
 }
 
@@ -79,7 +80,8 @@ static int vu_gpio_start(VirtIODevice *vdev)
 {
     VirtioBus *k = vdev->vbus;
     VHostUserGPIO *gpio = vdev->vhugpio;
-    int ret, i;
+    unsigned int i;
+    int ret;
 
     DBG("vu_gpio_start()\n");
 
@@ -135,6 +137,7 @@ out_with_err_host_notifiers:
 static void vu_gpio_stop(VirtIODevice *vdev)
 {
     DBG("vu_gpio_stop() not yet implemented\n");
+    (void)vdev;
 }
 
 static void vu_gpio_set_status(VirtIODevice *vdev, uint8_t status)
@@ -177,6 +180,8 @@ static void vu_gpio_handle_output(VirtIODevice *vdev, VirtQueue *vq)
      * however virtio's cleanup path can call this.
      */
     DBG("vu_gpio_handle_output not yet implemented\n");
+    (void)vdev;
+    (void)vq;
 }
 
 static void vu_gpio_guest_notifier_mask(VirtIODevice *vdev, int idx, bool mask)
@@ -191,12 +196,13 @@ static void vu_gpio_guest_notifier_mask(VirtIODevice *vdev, int idx, bool mask)
 static void do_vhost_user_cleanup(VirtIODevice *vdev, VHostUserGPIO *gpio)
 {
     DBG("do_vhost_user_cleanup() not yet implemented\n");
+    (void)vdev;
+    (void)gpio;
 }
 
 static int vu_gpio_connect(VirtIODevice *vdev)
 {
     VHostUserGPIO *gpio = vdev->vhugpio;
-    int ret;
 
     DBG("vu_gpio_connect()\n");
 
@@ -259,6 +265,7 @@ static int vu_gpio_realize_connect(VHostUserGPIO *gpio)
 static void vu_gpio_device_unrealize(VirtIODevice *vdev)
 {
     DBG("vu_gpio_device_unrealize() not yet implemented\n");
+    (void)vdev;
 }
 
 static void print_config_gpio(uint8_t *config_data)
@@ -266,6 +273,7 @@ static void print_config_gpio(uint8_t *config_data)
     struct virtio_gpio_config *config =
         (struct virtio_gpio_config *)config_data;
 
+    (void)config;
     DBG("ngpio: %hu\n", config->ngpio);
     DBG("gpio_names_size: %u\n", config->gpio_names_size);
 }
@@ -298,7 +306,7 @@ void vu_gpio_init(VirtIODevice *vdev)
     }
 
     vdev->vhugpio = vhugpio;
-    vdev->nvqs = &dev->nvqs;
+    vdev->nvqs = (int *)&dev->nvqs;
     vhugpio->parent = vdev;
     vhugpio->vhost_dev = dev;
 
@@ -310,12 +318,13 @@ out:
 }
 
 /* TODO: Add queue_num, queue_size as parameters */
-void vu_gpio_device_realize()
+void vu_gpio_device_realize(int queue_num, int queue_size)
 {
     int retries, ret;
-    int i;
 
     DBG("vu_gpio_device_realize()\n");
+    (void)queue_num;
+    (void)queue_size;
 
     /* This needs to be added */
     proxy = (VirtIOMMIOProxy *)malloc(sizeof(VirtIOMMIOProxy));
@@ -368,9 +377,12 @@ void vu_gpio_device_realize()
 
     return;
 
-    /* TODO: Fix the following considering also do_vhost_user_cleanup() */
-out_with_cmd_vq:
-    /* free(global_vdev->vhugpio->command_vq); */
+    /*
+     * TODO: Fix the following considering also do_vhost_user_cleanup()
+     *
+     * out_with_cmd_vq:
+     * free(global_vdev->vhugpio->command_vq);
+     */
 out_with_dev:
     free(global_vdev->vhugpio);
 out_with_proxy:

@@ -29,6 +29,8 @@
 static int vhost_input_config_change(struct vhost_dev *dev)
 {
     DBG("vhost-user-input: unhandled backend config change\n");
+    (void)dev;
+
     return -1;
 }
 
@@ -39,8 +41,6 @@ const VhostDevConfigOps config_ops = {
 static void vhost_input_change_active(VirtIOInput *vinput)
 {
     DBG("vhost_input_change_active(...)\n");
-
-    VhostUserInput *vhuinput = global_vdev->vhuinput;
 
     if (vinput->active) {
         vhost_user_backend_start(global_vdev);
@@ -77,7 +77,7 @@ static void vhost_input_set_config(VirtIODevice *vdev,
     ret = vhost_dev_set_config(vhi->vhost_dev, config_data,
                                0, sizeof(virtio_input_config),
                                VHOST_SET_CONFIG_TYPE_MASTER);
-    if (ret) {
+    if (ret < 0) {
         DBG("vhost_input_set_config failed\n");
         return;
     }
@@ -96,7 +96,9 @@ static void print_config_input(uint8_t *config_data)
 {
     struct virtio_input_config *config_strct =
         (struct virtio_input_config *)config_data;
+
     DBG("print_config_input: Not yet implemented\n");
+    (void)config_strct;
 }
 
 static void vhost_input_class_init(VirtIODevice *vdev)
@@ -130,7 +132,7 @@ void vhost_user_input_init(VirtIODevice *vdev)
     vdev->vinput->input_class = input_class;
 
     vdev->vhuinput = vhuinput;
-    vdev->nvqs = &dev->nvqs;
+    vdev->nvqs = (int*)&dev->nvqs;
     vhuinput->vdev = vdev;
     vhuinput->vhost_dev = dev;
     vhuinput->vdev_input = vinput;
@@ -149,11 +151,13 @@ void vhost_user_input_init(VirtIODevice *vdev)
 }
 
 
-void vhost_user_input_realize()
+void vhost_user_input_realize(int queue_num, int queue_size)
 {
     int nvqs = 2; /* qemu choice: 2 */
 
     DBG("vhost_user_input_realize()\n");
+    (void)queue_num;
+    (void)queue_size;
 
     vhost_dev_set_config_notifier(global_vdev->vhuinput->vhost_dev,
                                   &config_ops);
@@ -181,7 +185,8 @@ void vhost_user_input_realize()
 void vhost_user_backend_start(VirtIODevice *vdev)
 {
     VirtioBus *k = vdev->vbus;
-    int ret, i;
+    unsigned int i;
+    int ret;
 
     DBG("vhost_user_backend_start(...)\n");
 
@@ -232,4 +237,5 @@ void vhost_user_backend_start(VirtIODevice *vdev)
 void vhost_user_backend_stop(VirtIODevice *vdev)
 {
     DBG("vhost_user_backend_stop() not yet implemented\n");
+    (void)vdev;
 }

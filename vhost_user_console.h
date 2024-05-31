@@ -1,6 +1,6 @@
 /*
  *
- * Copyright (c) 2023 Virtual Open Systems SAS.
+ * Copyright (c) 2023-2024 Virtual Open Systems SAS.
  *
  * This work is licensed under the terms of the GNU GPL, version 2 or
  * (at your option) any later version.  See the COPYING file in the
@@ -65,6 +65,6 @@ typedef struct VHostUserConsole {
     VirtQueue *ctrl_tx_vq;
 } VHostUserConsole;
 
-void vhost_user_console_realize(void);
+void vhost_user_console_realize(int queue_num, int queue_size);
 
 #endif /* VHOST_USER_CONSOLE */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2023 Virtual Open Systems SAS
+ * Copyright 2022-2024 Virtual Open Systems SAS
  *
  * Authors:
  *  Timos Ampelikiotis <t.ampelikiotis@virtualopensystems.com>
@@ -41,31 +41,13 @@
 #include <sys/un.h>
 
 /* Project header files */
-#include "virtio_loopback.h"
-#include "vhost_user_loopback.h"
-#include "virtio_rng.h"
-#include "vhost_user_rng.h"
-#include "vhost_user_blk.h"
-#include "vhost_user_input.h"
-#include "vhost_user_gpio.h"
-#include "vhost_user_sound.h"
-#include "vhost_user_can.h"
-#include "vhost_user_console.h"
-
-
-#ifdef DEBUG
-#define DBG(...) printf("adapter: " __VA_ARGS__)
-#else
-#define DBG(...)
-#endif /* DEBUG */
-
+#include "adapter.h"
 
 /* Global variables */
 int client_sock;
 struct vhost_dev *dev;
 struct adapter_dev *adev;
 struct vhost_user *vudev;
-
 
 void vhost_user_adapter_init(void)
 {
@@ -98,7 +80,6 @@ void vhost_user_adapter_init(void)
     adev->virtio_dev = global_vdev;
     adev->vbus = global_vbus;
 }
-
 
 void client(char *sock_path)
 {
@@ -159,11 +140,7 @@ int find_arg(int argc, char **argv, char *str)
 
 int val_device_arg(char *str)
 {
-    char *adapter_devices[] = {"vrng", "vhurng", "vhublk", "vhuinput",
-                               "vhusnd", "vhugpio", "vhucan", "vhuconsole"};
-    char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput", "vhusnd",
-                           "vhugpio", "vhucan", "vhuconsole"};
-    int adapter_devices_num = 8, i;
+    int adapter_devices_num = ADAPTER_DEVS, i;
 
     for (i = 0; i < adapter_devices_num; i++) {
         if (!strcmp(adapter_devices[i], str)) {
@@ -176,9 +153,7 @@ int val_device_arg(char *str)
 
 bool check_vhu_device(char *str)
 {
-    char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput", "vhusnd",
-                           "vhugpio", "vhucan", "vhuconsole"};
-    int vhu_devices_num = 7, i;
+    int vhu_devices_num = VHU_DEVS, i;
 
     for (i = 0; i < vhu_devices_num; i++) {
         if (!strcmp(vhu_devices[i], str)) {
@@ -276,36 +251,38 @@ int main(int argc, char **argv)
     /* Initialize the adapter data structures */
     vhost_user_adapter_init();
 
+    /* Get queue number and size from arguments */
+    get_queue_num_size_args(argc, argv, &queue_num, &queue_size);
+
     /* Initialize the virtio/vhost-user device */
     /* TODO: Switch numbers with name defs */
     switch (device_id) {
     case 1:
-        virtio_rng_realize();
+        virtio_rng_realize(queue_num, queue_size);
         break;
     case 2:
-        vhost_user_rng_realize();
+        vhost_user_rng_realize(queue_num, queue_size);
         break;
     case 3:
-        get_queue_num_size_args(argc, argv, &queue_num, &queue_size);
         printf("Running vhublk with num %d and size %d\n",
                                             queue_num, queue_size);
         vhost_user_blk_realize(queue_num, queue_size);
         break;
     case 4:
         vhost_user_input_init(global_vdev);
-        virtio_input_device_realize();
+        virtio_input_device_realize(queue_num, queue_size);
         break;
     case 5:
-        vus_device_realize();
+        vus_device_realize(queue_num, queue_size);
         break;
     case 6:
-        vu_gpio_device_realize();
+        vu_gpio_device_realize(queue_num, queue_size);
         break;
     case 7:
-        vhost_user_can_realize();
+        vhost_user_can_realize(queue_num, queue_size);
         break;
     case 8:
-        vhost_user_console_realize();
+        vhost_user_console_realize(queue_num, queue_size);
         break;
     default:
         exit(1);

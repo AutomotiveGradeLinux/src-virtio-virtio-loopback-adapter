@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Virtual Open Systems SAS.
+ * Copyright (c) 2023-2024 Virtual Open Systems SAS.
  *
  * This work is licensed under the terms of the GNU GPL, version 2 or
  * (at your option) any later version.  See the COPYING file in the
@@ -47,8 +47,8 @@ static void vhost_user_console_start(VirtIODevice *vdev)
 {
     VHostUserConsole *vhuconsole = vdev->vhuconsole;
     VirtioBus *k = vdev->vbus;
+    unsigned int i;
     int ret;
-    int i;
 
     DBG("vhost_user_console_start(...)\n");
 
@@ -86,9 +86,6 @@ static void vhost_user_console_start(VirtIODevice *vdev)
         vhost_virtqueue_mask(vhuconsole->vhost_dev, vdev, i, false);
     }
 
-    /* Wait a bit for the vrings to be set in vhost-user-device */
-    sleep(1);
-
     return;
 
 err_guest_notifiers:
@@ -100,6 +97,7 @@ err_host_notifiers:
 static void vhost_user_console_stop(VirtIODevice *vdev)
 {
     DBG("vhost_user_console_stop: not yet implemented\n");
+    (void)vdev;
 }
 
 static void vhost_user_console_set_status(VirtIODevice *vdev, uint8_t status)
@@ -137,6 +135,8 @@ static void vhost_user_console_handle_output(VirtIODevice *vdev, VirtQueue *vq)
      * however virtio's cleanup path console call this.
      */
     DBG("vhost_user_console_handle_output: Not yet implemented!\n");
+    (void)vdev;
+    (void)vq;
 }
 
 static int vhost_user_console_config_change(struct vhost_dev *dev)
@@ -162,12 +162,14 @@ const VhostDevConfigOps console_config_ops = {
 
 static void vhost_user_console_init(VirtIODevice *vdev);
 
-void vhost_user_console_realize()
+void vhost_user_console_realize(int queue_num, int queue_size)
 {
     VirtIODevice *vdev = global_vdev;
     int ret;
 
     DBG("vhost_user_console_device_realize\n");
+    (void)queue_num;
+    (void)queue_size;
 
     /* This needs to be added */
     proxy = (VirtIOMMIOProxy *)malloc(sizeof(VirtIOMMIOProxy));
@@ -240,19 +242,26 @@ vhost_dev_init_failed:
 static void vhost_user_console_device_unrealize(VirtIODevice *vdev)
 {
     DBG("vhost_user_blk_device_unrealize not yet implemented\n");
+    (void)vdev;
 }
 
-static struct vhost_dev *vhost_user_console_get_vhost(VirtIODevice *vdev)
-{
-    VHostUserConsole *vhuconsole = vdev->vhuconsole;
-    return vhuconsole->vhost_dev;
-}
+/*
+ * This function might be useful in the future:
+ *
+ * static struct vhost_dev *vhost_user_console_get_vhost(VirtIODevice *vdev)
+ * {
+ *     VHostUserConsole *vhuconsole = vdev->vhuconsole;
+ *     return vhuconsole->vhost_dev;
+ * }
+ *
+ */
 
 static void print_config_console(uint8_t *config_data)
 {
     struct virtio_console_config *config_strct =
         (struct virtio_console_config *)config_data;
 
+    (void)config_strct;
     DBG("print_config_console:\n");
     DBG("\tuint16_t cols: %u\n", config_strct->cols);
     DBG("\tuint16_t rows: %u\n", config_strct->rows);
@@ -283,7 +292,7 @@ static void vhost_user_console_init(VirtIODevice *vdev)
     VHostUserConsole *vhuconsole =
                         (VHostUserConsole *)malloc(sizeof(VHostUserConsole));
     vdev->vhuconsole = vhuconsole;
-    vdev->nvqs = &vdev->vhdev->nvqs;
+    vdev->nvqs = (int *)&vdev->vhdev->nvqs;
     vhuconsole->parent = vdev;
     vhuconsole->virtqs = vdev->vqs;
     vhuconsole->vhost_dev = vdev->vhdev;

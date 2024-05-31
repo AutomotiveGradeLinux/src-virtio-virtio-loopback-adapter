@@ -1,7 +1,7 @@
 /*
  * Based on virtio-gpio.h of QEMU project
  *
- * Copyright (c) 2023 Virtual Open Systems SAS.
+ * Copyright (c) 2023-2024 Virtual Open Systems SAS.
  *
  * This work is licensed under the terms of the GNU GPL, version 2 or
  * (at your option) any later version.  See the COPYING file in the
@@ -32,6 +32,6 @@ struct VHostUserGPIO {
     bool started_vu;
 };
 
-void vu_gpio_device_realize();
+void vu_gpio_device_realize(int queue_num, int queue_size);
 
 #endif /* VHOST_USER_GPIO */

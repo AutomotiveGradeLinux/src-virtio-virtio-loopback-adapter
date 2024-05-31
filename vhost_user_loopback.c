@@ -84,7 +84,7 @@ void vmsg_close_fds(VhostUserMsg *vmsg)
 }
 
 
-bool vu_message_write(int conn_fd, VhostUserMsg *vmsg)
+static int vu_message_write(int conn_fd, VhostUserMsg *vmsg)
 {
     int rc;
     uint8_t *p = (uint8_t *)vmsg;
@@ -134,16 +134,10 @@ bool vu_message_write(int conn_fd, VhostUserMsg *vmsg)
         } while (rc < 0 && (errno == EINTR || errno == EAGAIN));
     }
 
-    if (rc <= 0) {
-        DBG("Error while writing\n");
-        return false;
-    }
-
-    return true;
+    return rc;
 }
 
-
-bool vu_message_read(int conn_fd, VhostUserMsg *vmsg)
+static int vu_message_read(int conn_fd, VhostUserMsg *vmsg)
 {
     char control[CMSG_SPACE(VHOST_MEMORY_BASELINE_NREGIONS * sizeof(int))] = {};
     struct iovec iov = {
@@ -201,12 +195,9 @@ bool vu_message_read(int conn_fd, VhostUserMsg *vmsg)
         }
     }
 
-    return true;
-
 fail:
     vmsg_close_fds(vmsg);
-
-    return false;
+    return rc;
 }
 
 int vhost_user_set_owner(void)
@@ -314,13 +305,14 @@ int enforce_reply(const VhostUserMsg *msg)
 
 int vhost_user_set_u64(int request, uint64_t u64, bool wait_for_reply)
 {
+    int ret = 0;
+
     VhostUserMsg msg = {
         .request = request,
         .flags = VHOST_USER_VERSION,
         .payload.u64 = u64,
         .size = sizeof(msg.payload.u64),
     };
-    int ret;
 
     print_vhost_user_messages(request);
     DBG("\tSet value: 0x%lx\n", u64);
@@ -343,7 +335,7 @@ int vhost_user_set_u64(int request, uint64_t u64, bool wait_for_reply)
         return enforce_reply(&msg);
     }
 
-    return 0;
+    return ret;
 }
 
 int vhost_user_set_features(struct vhost_dev *dev,
@@ -420,8 +412,7 @@ int vhost_setup_slave_channel(struct vhost_dev *dev)
     }
 
     ret = vu_message_write(client_sock, &msg);
-    if (!ret) {
-        DBG("Go out\n");
+    if (ret < 0) {
         goto out;
     }
 
@@ -450,7 +441,46 @@ int vhost_user_get_vq_index(struct vhost_dev *dev, int idx)
      *
      * assert(idx >= dev->vq_index && idx < dev->vq_index + (int)dev->nvqs);
      */
+    (void)dev;
     return idx;
+}
+
+static int vhost_user_write_sync(VhostUserMsg *msg,
+                                 bool wait_for_reply)
+{
+    int ret;
+
+    if (wait_for_reply) {
+        bool reply_supported = virtio_has_feature(dev->protocol_features,
+                                          VHOST_USER_PROTOCOL_F_REPLY_ACK);
+        if (reply_supported) {
+            msg->flags |= VHOST_USER_NEED_REPLY_MASK;
+        }
+    }
+
+    ret = vu_message_write(client_sock, msg);
+    if (ret < 0) {
+        return ret;
+    }
+
+    if (wait_for_reply) {
+        uint64_t dummy;
+        DBG("Wait for reply\n");
+
+        if (msg->flags & VHOST_USER_NEED_REPLY_MASK) {
+            return process_message_reply(msg);
+        }
+
+       /*
+        * We need to wait for a reply but the backend does not
+        * support replies for the command we just sent.
+        * Send VHOST_USER_GET_FEATURES which makes all backends
+        * send a reply.
+        */
+        return vhost_user_get_features(&dummy);
+    }
+
+    return 0;
 }
 
 int vhost_set_vring_file(VhostUserRequest request,
@@ -464,6 +494,7 @@ int vhost_set_vring_file(VhostUserRequest request,
         .payload.u64 = file->index & VHOST_USER_VRING_IDX_MASK,
         .size = sizeof(msg.payload.u64),
     };
+
 
     if (ioeventfd_enabled() && file->fd > 0) {
         fds[fd_num++] = file->fd;
@@ -483,7 +514,7 @@ int vhost_set_vring_file(VhostUserRequest request,
     msg.fd_num = fd_num;
     memcpy(msg.fds, &fds, fd_num * sizeof(int));
 
-    return !vu_message_write(client_sock, &msg);
+    return vu_message_write(client_sock, &msg);
 }
 
 int vhost_user_set_vring_kick(struct vhost_vring_file *file)
@@ -500,7 +531,8 @@ int vhost_user_set_vring_call(struct vhost_vring_file *file)
 
 static int vhost_set_vring(struct vhost_dev *dev,
                            unsigned long int request,
-                           struct vhost_vring_state *ring)
+                           struct vhost_vring_state *ring,
+                           bool wait_for_reply)
 {
     VhostUserMsg msg = {
         .request = request,
@@ -508,58 +540,36 @@ static int vhost_set_vring(struct vhost_dev *dev,
         .payload.state = *ring,
         .size = sizeof(msg.payload.state),
     };
+    (void)dev;
 
-    return !vu_message_write(client_sock, &msg);
+    return vhost_user_write_sync(&msg, wait_for_reply);
 }
 
 int vhost_user_set_vring_num(struct vhost_dev *dev,
                                     struct vhost_vring_state *ring)
 {
-    return vhost_set_vring(dev, VHOST_USER_SET_VRING_NUM, ring);
+    return vhost_set_vring(dev, VHOST_USER_SET_VRING_NUM, ring, false);
 }
 
 int vhost_user_set_vring_base(struct vhost_dev *dev,
                                      struct vhost_vring_state *ring)
 {
-    return vhost_set_vring(dev, VHOST_USER_SET_VRING_BASE, ring);
+    return vhost_set_vring(dev, VHOST_USER_SET_VRING_BASE, ring, false);
 }
 
 
 int vhost_user_set_vring_addr(struct vhost_dev *dev,
                                      struct vhost_vring_addr *addr)
 {
-    int ret;
     VhostUserMsg msg = {
         .request = VHOST_USER_SET_VRING_ADDR,
         .flags = VHOST_USER_VERSION,
         .payload.addr = *addr,
         .size = sizeof(msg.payload.addr),
     };
+    (void)dev;
 
-    bool reply_supported = virtio_has_feature(dev->protocol_features,
-                                              VHOST_USER_PROTOCOL_F_REPLY_ACK);
-
-    /*
-     * wait for a reply if logging is enabled to make sure
-     * backend is actually logging changes
-     */
-    bool wait_for_reply = addr->flags & (1 << VHOST_VRING_F_LOG);
-
-    if (reply_supported && wait_for_reply) {
-        msg.flags |= VHOST_USER_NEED_REPLY_MASK;
-    }
-
-    ret = vu_message_write(client_sock, &msg);
-    if (ret < 0) {
-        DBG("Fail vhost_user_set_vring_addr\n");
-        return ret;
-    }
-
-    if (wait_for_reply) {
-        return enforce_reply(&msg);
-    }
-
-    return 0;
+    return vhost_user_write_sync(&msg, true);
 }
 
 
@@ -580,7 +590,7 @@ int vhost_virtqueue_init(struct vhost_dev *dev,
     file.fd = event_notifier_get_wfd(&vq->masked_notifier);
 
     r = vhost_user_set_vring_call(&file);
-    if (r) {
+    if (r < 0) {
         DBG("vhost_set_vring_call failed\n");
         return r;
     }
@@ -615,13 +625,13 @@ int vhost_user_get_config(struct vhost_dev *dev, uint8_t *config,
     DBG("vu_message_write return: %d\n", ret);
     if (ret < 0) {
         DBG("vhost_get_config failed\n");
-        return -1;
+        return ret;
     }
 
     ret = vu_message_read(client_sock, &msg);
     if (ret < 0) {
         DBG("vhost_get_config failed\n");
-        return -1;
+        return ret;
     }
 
     if (msg.request != VHOST_USER_GET_CONFIG) {
@@ -795,7 +805,7 @@ int vhost_user_set_inflight_fd(struct vhost_dev *dev,
     msg.fd_num = 1;
     memcpy(msg.fds, &inflight->fd, msg.fd_num * sizeof(int));
 
-    return !vu_message_write(client_sock, &msg); /* Returns true or false*/
+    return vu_message_write(client_sock, &msg);
 }
 
 
@@ -807,7 +817,10 @@ static MemoryRegion *vhost_user_get_mr_data(struct vhost_memory_region *reg,
 {
     MemoryRegion *mr;
 
+    (void)reg;
+    mr = (MemoryRegion *)malloc(sizeof(MemoryRegion));
     *offset = 0;
+    /* TODO: Dublicate the file descriptor to driscriminate the mmap calls from the driver */
     *fd = loopback_fd;
 
     return mr;
@@ -830,7 +843,8 @@ static int vhost_user_fill_set_mem_table_msg(struct vhost_user *u,
                                              int *fds, size_t *fd_num,
                                              bool track_ramblocks)
 {
-    int i, fd;
+    uint32_t i;
+    int fd;
     ram_addr_t offset;
     MemoryRegion *mr;
     struct vhost_memory_region *reg;
@@ -894,18 +908,22 @@ static void scrub_shadow_regions(struct vhost_dev *dev,
     struct vhost_user *u = adev->vudev;
     bool found[VHOST_USER_MAX_RAM_SLOTS] = {};
     struct vhost_memory_region *reg, *shadow_reg;
-    int i, j, fd, add_idx = 0, rm_idx = 0, fd_num = 0;
+    int fd, add_idx = 0, rm_idx = 0, fd_num = 0;
+    uint32_t i, j;
     ram_addr_t offset;
     MemoryRegion *mr;
     bool matching;
 
+    (void)mr;
+    (void)shadow_pcb;
+    (void)track_ramblocks;
     /*
      * Find memory regions present in our shadow state which are not in
      * the device's current memory state.
      *
      * Mark regions in both the shadow and device state as "found".
      */
-    for (i = 0; i < u->num_shadow_regions; i++) {
+    for (i = 0; i < (uint32_t)u->num_shadow_regions; i++) {
         shadow_reg = &u->shadow_regions[i];
         matching = false;
 
@@ -972,12 +990,14 @@ static int send_remove_regions(struct vhost_dev *dev,
                                int nr_rem_reg, VhostUserMsg *msg,
                                bool reply_supported)
 {
-    struct vhost_user *u = adev->vudev;
     struct vhost_memory_region *shadow_reg;
-    int i, fd, shadow_reg_idx, ret;
+    int i, fd, shadow_reg_idx, ret = 0;
     ram_addr_t offset;
     VhostUserMemoryRegion region_buffer;
 
+    (void)ret;
+    (void)dev;
+    (void)shadow_reg_idx;
     /*
      * The regions in remove_reg appear in the same order they do in the
      * shadow table. Therefore we can minimize memory copies by iterating
@@ -999,8 +1019,9 @@ static int send_remove_regions(struct vhost_dev *dev,
             msg->fd_num = 1;
             memcpy(msg->fds, &loopback_fd, sizeof(int));
 
-            if (vu_message_write(client_sock, msg) < 0) {
-                return -1;
+            ret = vu_message_write(client_sock, msg);
+            if (ret < 0) {
+                return ret;
             }
 
             if (reply_supported) {
@@ -1018,7 +1039,7 @@ static int send_remove_regions(struct vhost_dev *dev,
 
     }
 
-    return 0;
+    return ret;
 }
 
 static int send_add_regions(struct vhost_dev *dev,
@@ -1027,12 +1048,17 @@ static int send_add_regions(struct vhost_dev *dev,
                             bool reply_supported, bool track_ramblocks)
 {
     struct vhost_user *u = adev->vudev;
-    int i, fd, ret, reg_idx, reg_fd_idx;
+    int i, fd, ret = 0, reg_idx, reg_fd_idx;
     struct vhost_memory_region *reg;
     MemoryRegion *mr;
     ram_addr_t offset;
-    VhostUserMsg msg_reply;
     VhostUserMemoryRegion region_buffer;
+
+    (void)dev;
+    (void)shadow_pcb;
+    (void)mr;
+    (void)ret;
+    (void)reg_fd_idx;
 
     for (i = 0; i < nr_add_reg; i++) {
         reg = add_reg[i].region;
@@ -1052,9 +1078,10 @@ static int send_add_regions(struct vhost_dev *dev,
             msg->fd_num = 1;
             memcpy(msg->fds, &loopback_fd, sizeof(int));
 
-            if (vu_message_write(client_sock, msg) < 0) {
+            ret = vu_message_write(client_sock, msg);
+            if (ret < 0) {
                 DBG("send_add_regions -> write failed\n");
-                return -1;
+                return ret;
             }
 
             if (reply_supported) {
@@ -1074,7 +1101,7 @@ static int send_add_regions(struct vhost_dev *dev,
         }
     }
 
-    return 0;
+    return ret;
 }
 
 static int vhost_user_add_remove_regions(struct vhost_dev *dev,
@@ -1127,6 +1154,9 @@ static int vhost_user_set_mem_table_postcopy(struct vhost_dev *dev,
                                              bool reply_supported,
                                              bool config_mem_slots)
 {
+    (void)dev;
+    (void)reply_supported;
+    (void)config_mem_slots;
     DBG("vhost_user_set_mem_table_postcopy(...) not yet implemented\n");
     return 0;
 }
@@ -1140,12 +1170,12 @@ int vhost_user_set_mem_table(struct vhost_dev *dev)
 {
     int fds[VHOST_MEMORY_BASELINE_NREGIONS];
     size_t fd_num = 0;
+    int ret = 0;
     bool reply_supported = virtio_has_feature(dev->protocol_features,
                                               VHOST_USER_PROTOCOL_F_REPLY_ACK);
     bool config_mem_slots =
         virtio_has_feature(dev->protocol_features,
                            VHOST_USER_PROTOCOL_F_CONFIGURE_MEM_SLOTS);
-    int ret;
     struct vhost_user *u = adev->vudev;
     bool do_postcopy = false;
 
@@ -1185,17 +1215,18 @@ int vhost_user_set_mem_table(struct vhost_dev *dev)
         msg.fd_num = fd_num;
         memcpy(msg.fds, fds, fd_num * sizeof(int));
 
-        if (vu_message_write(client_sock, &msg) < 0) {
+        ret = vu_message_write(client_sock, &msg);
+        if (ret < 0) {
             DBG("vhost_user_set_mem_table failed write msg\n");
-            return -1;
+            return ret;
         }
 
         if (reply_supported) {
-            return process_message_reply(&msg);
+            ret = process_message_reply(&msg);
         }
     }
 
-    return 0;
+    return ret;
 }
 
 
@@ -1205,6 +1236,7 @@ void print_mem_table(struct vhost_dev *dev)
     struct vhost_memory_region *cur_vmr;
     int i;
 
+    (void)cur_vmr;
     DBG("print_mem_table:\n");
 
     for (i = 0; i < dev->n_mem_sections; i++) {
@@ -1286,24 +1318,25 @@ int last_avail = -1;
 void find_add_new_reg(struct vhost_dev *dev)
 {
     int sglist_elem_num;
-    int i;
+    uint64_t i, j;
 
+    (void)sglist_elem_num;
     DBG("Total nvqs: %d\n", dev->nvqs);
-    for (int i = 0; i < dev->nvqs; i++) {
+    for (i = 0; (unsigned int)i < dev->nvqs; i++) {
 
         VRing *vring = &dev->vdev->vq[i].vring;
         uint64_t vring_num = vring->num;
 
-        DBG("For vq[%d]:\n", i);
-        DBG("vqs[%u] hpa 0x%lx\n", i, vring_phys_addrs[i]);
-        DBG("vq[%d].vring.num: %ld\n", i, vring_num);
+        DBG("For vq[%lu]:\n", i);
+        DBG("vqs[%lu] hpa 0x%lx\n", i, vring_phys_addrs[i]);
+        DBG("vq[%lu].vring.num: %ld\n", i, vring_num);
         DBG("We got avail buf: %d\n",
                 ((VRingAvail *)(dev->vdev->vq[i].vring.avail))->idx);
 
         int avail_diff = ((VRingAvail *)(dev->vdev->vq[i].vring.avail))->idx
                                                                 - last_avail;
 
-        for (int j = 0; j < vring_num; j++) {
+        for (j = 0; j < vring_num; j++) {
 
             uint64_t desc_addr = dev->vdev->vq[i].vring.desc;
             VRingDesc desc_p = ((VRingDesc *)desc_addr)[j];
@@ -1318,10 +1351,10 @@ void find_add_new_reg(struct vhost_dev *dev)
                 break;
             }
 
-            DBG("desc[%u] 0x%lx\n", j, desc_addr);
-            DBG("desc[%u].addr 0x%lx\n", j, sg_addr);
-            DBG("desc[%u].len 0x%lu\n", j, sg_len);
-            DBG("desc[%u].flags 0x%u\n", j, desc_p.flags);
+            DBG("desc[%lu] 0x%lx\n", j, desc_addr);
+            DBG("desc[%lu].addr 0x%lx\n", j, sg_addr);
+            DBG("desc[%lu].len 0x%lu\n", j, sg_len);
+            DBG("desc[%lu].flags 0x%u\n", j, desc_p.flags);
 
             if (!find_reg(dev, sg_addr, sg_len)) {
                 vhost_add_reg(dev, sg_addr, sg_len);
@@ -1338,14 +1371,8 @@ void find_add_new_reg(struct vhost_dev *dev)
 
 void vhost_commit_init_vqs(struct vhost_dev *dev)
 {
-    MemoryRegionSection *old_sections;
-    int n_old_sections;
-    uint64_t log_size;
     size_t regions_size;
-    int r;
-    int i;
-    bool changed = false;
-    int sglist_elem_num;
+    unsigned int i;
 
     dev->n_mem_sections = dev->nvqs;
 
@@ -1462,7 +1489,7 @@ int vhost_user_backend_init(struct vhost_dev *vhdev)
             vhdev->max_queues = 1;
         }
 
-        if (vhdev->num_queues && vhdev->max_queues < vhdev->num_queues) {
+        if (vhdev->num_queues && vhdev->max_queues < (uint64_t)vhdev->num_queues) {
             DBG("The maximum number of queues supported by the "
                        "backend is %ld\n", vhdev->max_queues);
             return -EINVAL;
@@ -1592,7 +1619,8 @@ void vhost_dev_init(struct vhost_dev *vhdev)
 
 int vhost_user_set_vring_enable(struct vhost_dev *dev, int enable)
 {
-    int i;
+    unsigned int i;
+    int ret;
     DBG("vhost_user_set_vring_enable:\n");
 
     if (!virtio_has_feature(dev->features, VHOST_USER_F_PROTOCOL_FEATURES)) {
@@ -1601,13 +1629,12 @@ int vhost_user_set_vring_enable(struct vhost_dev *dev, int enable)
     }
 
     for (i = 0; i < dev->nvqs; ++i) {
-        int ret;
         struct vhost_vring_state state = {
             .index = dev->vq_index + i,
             .num   = enable,
         };
 
-        ret = vhost_set_vring(dev, VHOST_USER_SET_VRING_ENABLE, &state);
+        ret = vhost_set_vring(dev, VHOST_USER_SET_VRING_ENABLE, &state, true);
         if (ret < 0) {
             /*
              * Restoring the previous state is likely infeasible, as well as
@@ -1623,6 +1650,7 @@ int vhost_user_set_vring_enable(struct vhost_dev *dev, int enable)
 
 static int vhost_user_set_status(struct vhost_dev *dev, uint8_t status)
 {
+    (void)dev;
     return vhost_user_set_u64(VHOST_USER_SET_STATUS, status, false);
 }
 
@@ -1631,6 +1659,7 @@ static int vhost_user_get_status(struct vhost_dev *dev, uint8_t *status)
     uint64_t value;
     int ret;
 
+    (void)dev;
     ret = vhost_user_get_u64(VHOST_USER_GET_STATUS, &value);
     if (ret < 0) {
         return ret;
@@ -1668,7 +1697,7 @@ int vhost_user_dev_start(struct vhost_dev *dev, bool started)
     }
 
     /* Set device status only for last queue pair */
-    if (dev->vq_index + dev->nvqs != dev->vq_index_end) {
+    if (dev->vq_index + dev->nvqs != (unsigned int)dev->vq_index_end) {
         return 0;
     }
 

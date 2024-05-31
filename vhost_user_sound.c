@@ -3,7 +3,7 @@
  *
  * Copyright 2020 Red Hat, Inc.
  *
- * Copyright (c) 2023 Virtual Open Systems SAS.
+ * Copyright (c) 2023-2024 Virtual Open Systems SAS.
  *
  * This work is licensed under the terms of the GNU GPL, version 2 or
  * (at your option) any later version.  See the COPYING file in the
@@ -62,7 +62,7 @@ static void vus_start(VirtIODevice *vdev)
     VHostUserSound *vhusnd = vdev->vhusnd;
     VirtioBus *k = vdev->vbus;
     int ret;
-    int i;
+    unsigned int i;
 
     DBG("vus_start(...)\n");
 
@@ -91,9 +91,6 @@ static void vus_start(VirtIODevice *vdev)
         goto err_guest_notifiers;
     }
 
-    /* Wait a bit before the vrings be set in vhost-user-device */
-    sleep(1);
-
     /*
      * guest_notifier_mask/pending not used yet, so just unmask
      * everything here.  virtio-pci will do the right thing by
@@ -102,9 +99,6 @@ static void vus_start(VirtIODevice *vdev)
     for (i = 0; i < vhusnd->vhost_dev->nvqs; i++) {
         vhost_virtqueue_mask(vhusnd->vhost_dev, vdev, i, false);
     }
-
-    /* Wait a bit for the vrings to be set in vhost-user-device */
-    sleep(1);
 
     return;
 
@@ -117,6 +111,7 @@ err_host_notifiers:
 static void vus_stop(VirtIODevice *vdev)
 {
     DBG("vus_stop: not yet implemented\n");
+    (void)vdev;
 }
 
 static void vus_set_status(VirtIODevice *vdev, uint8_t status)
@@ -152,6 +147,8 @@ static void vus_snd_handle_output(VirtIODevice *vdev, VirtQueue *vq)
      * Not normally called; it's the daemon that handles the queue;
      * however virtio's cleanup path can call this.
      */
+    (void)vdev;
+    (void)vq;
 }
 
 /*
@@ -189,12 +186,14 @@ const VhostDevConfigOps snd_config_ops = {
 
 static void vhost_user_snd_init(VirtIODevice *vdev);
 
-void vus_device_realize()
+void vus_device_realize(int queue_num, int queue_size)
 {
     VirtIODevice *vdev = global_vdev;
     int ret;
 
     DBG("vus_device_realize\n");
+    (void)queue_num;
+    (void)queue_size;
 
     /* This needs to be added */
     proxy = (VirtIOMMIOProxy *)malloc(sizeof(VirtIOMMIOProxy));
@@ -261,21 +260,28 @@ vhost_dev_init_failed:
 static void vus_device_unrealize(VirtIODevice *vdev)
 {
     DBG("vhost_user_blk_device_unrealize not yet implemented\n");
+    (void)vdev;
 }
 
-static struct vhost_dev *vus_get_vhost(VirtIODevice *vdev)
-{
-    VHostUserSound *vhusnd = vdev->vhusnd;
-    return vhusnd->vhost_dev;
-}
+/*
+ * This will be might be useful in the future
+ *
+ * static struct vhost_dev *vus_get_vhost(VirtIODevice *vdev)
+ * {
+ *     VHostUserSound *vhusnd = vdev->vhusnd;
+ *     return vhusnd->vhost_dev;
+ * }
+ *
+ */
 
 static void print_config_snd(uint8_t *config_data)
 {
     struct virtio_snd_config *config_strct =
         (struct virtio_snd_config *)config_data;
 
-    DBG("print_config_snd:\n");
+    (void)config_strct;
 
+    DBG("print_config_snd:\n");
     /* # of available physical jacks */
     DBG("\tuint32_t jacks: %u\n", config_strct->jacks);
     /* # of available PCM streams */
@@ -306,7 +312,7 @@ static void vhost_user_snd_init(VirtIODevice *vdev)
 
     VHostUserSound *vhusnd = (VHostUserSound *)malloc(sizeof(VHostUserSound));
     vdev->vhusnd = vhusnd;
-    vdev->nvqs = &vdev->vhdev->nvqs;
+    vdev->nvqs = (int *)&vdev->vhdev->nvqs;
     vhusnd->parent = vdev;
     vhusnd->virtqs = vdev->vqs;
     vhusnd->vhost_dev = vdev->vhdev;

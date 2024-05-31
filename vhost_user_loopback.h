@@ -120,7 +120,7 @@ struct vhost_dev {
 };
 
 
-#define VHOST_USER_MAX_RAM_SLOTS 8
+#define VHOST_USER_MAX_RAM_SLOTS 16
 
 typedef uint64_t ram_addr_t;
 typedef struct RAMBlock RAMBlock;
@@ -912,8 +912,6 @@ bool vu_queue_avail_bytes(VuDev *dev, VuVirtq *vq, unsigned int in_bytes,
 
 bool vhost_user_one_time_request(VhostUserRequest request);
 void vmsg_close_fds(VhostUserMsg *vmsg);
-bool vu_message_write(int conn_fd, VhostUserMsg *vmsg);
-bool vu_message_read(int conn_fd, VhostUserMsg *vmsg);
 int vhost_user_set_owner(void);
 int process_message_reply(const VhostUserMsg *msg);
 int vhost_user_get_u64(int request, uint64_t *u64);
