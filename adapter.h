@@ -1,6 +1,6 @@
 /*
  *
- * Copyright (c) 2022-2024 Virtual Open Systems SAS.
+ * Copyright (c) 2022-2023 Virtual Open Systems SAS.
  *
  * Author:
  *  Timos Ampelikiotis <t.ampelikiotis@virtualopensystems.com>

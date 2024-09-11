@@ -120,7 +120,7 @@ struct vhost_dev {
 };
 
 
-#define VHOST_USER_MAX_RAM_SLOTS 16
+#define VHOST_USER_MAX_RAM_SLOTS 32
 
 typedef uint64_t ram_addr_t;
 typedef struct RAMBlock RAMBlock;

@@ -16,7 +16,7 @@
  *
  *  3) vhost.h of QEMU project
  *
- * Copyright 2022-2024 Virtual Open Systems SAS.
+ * Copyright 2022-2023 Virtual Open Systems SAS.
  *
  * This work is licensed under the terms of the GNU GPL, version 2.  See
  * the COPYING file in the top-level directory.
@@ -165,7 +165,6 @@
                             sizeof(virtio_device_info_struct_t))
 #define IRQ _IOC(_IOC_WRITE, 'k', 4, sizeof(int))
 #define SHARE_VQS _IOC(_IOC_WRITE, 'k', 5, sizeof(uint32_t))
-#define SHARE_BUF _IOC(_IOC_WRITE, 'k', 6, sizeof(uint64_t))
 #define SHARE_COM_STRUCT _IOC(_IOC_WRITE, 'k', 7, 0)
 
 #define VIRTIO_PCI_VRING_ALIGN         4096
