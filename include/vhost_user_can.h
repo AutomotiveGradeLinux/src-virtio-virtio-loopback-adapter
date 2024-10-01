@@ -43,15 +43,12 @@ typedef struct VHostUserCan {
     uint32_t queue_size;
     struct virtio_can_config config;
     struct vhost_dev *vhost_dev;
-    VirtQueue *ctrl_vq;
-    VirtQueue *tx_vq;
-    VirtQueue *rx_vq;
     /* Support classic CAN */
     bool support_can_classic;
     /* Support CAN FD */
     bool support_can_fd;
 } VHostUserCan;
 
-void vhost_user_can_realize(int queue_num, int queue_size);
+void vhost_user_can_realize(struct adapter_dev *adev);
 
 #endif /* VHOST_USER_CAN */

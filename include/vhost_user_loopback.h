@@ -36,16 +36,6 @@
 #include "virtio_loopback.h"
 #include "queue.h"
 
-typedef struct adapter_dev {
-    struct vhost_dev *vdev;
-    struct vhost_user *vudev;
-    VirtIODevice *virtio_dev;
-    VirtioBus *vbus;
-} AdapterDev;
-
-
-
-
 struct scrub_regions {
     struct vhost_memory_region *region;
     int reg_idx;
@@ -89,6 +79,7 @@ typedef struct MemoryRegionSection {
 
 struct vhost_dev {
     VirtIODevice *vdev;
+    struct vhost_user *vhudev;
     struct vhost_memory *mem;
     int n_mem_sections;
     MemoryRegionSection *mem_sections;
@@ -120,7 +111,7 @@ struct vhost_dev {
 };
 
 
-#define VHOST_USER_MAX_RAM_SLOTS 32
+#define VHOST_USER_MAX_RAM_SLOTS 16
 
 typedef uint64_t ram_addr_t;
 typedef struct RAMBlock RAMBlock;
@@ -236,11 +227,47 @@ struct vhost_user {
     struct vhost_memory_region shadow_regions[VHOST_USER_MAX_RAM_SLOTS];
 };
 
-/* Global variables */
-extern int client_sock;
-extern struct vhost_dev *dev;
-extern struct adapter_dev *adev;
-extern struct vhost_user *vudev;
+#define MAX_DEVICES 100
+#define MAX_NAME_LENGTH 256
+#define MAX_SOCKET_LENGTH 256
+
+typedef struct Device {
+    char device_name[MAX_NAME_LENGTH];
+    char socket[MAX_SOCKET_LENGTH];
+    int queue_num;
+    int queue_size;
+    int device_index;
+    int requires_socket;
+    int client_socket;
+} Device;
+
+typedef struct adapter_dev {
+    struct vhost_dev vdev;
+    struct vhost_user vudev;
+    VirtIODevice virtio_dev;
+    VirtioBus vbus;
+    Device *device_params;
+    /* More variables */
+    int loopback_fd;
+    int efd; /* Eventfd file descriptor */
+    virtio_neg_t *address;
+    virtio_device_info_struct_t device_info;
+    VirtIOMMIOProxy proxy;
+} AdapterDev;
+
+#define container_of_a(ptr, type, member) \
+    ((type *)((char *)(ptr) - offsetof(type, member)))
+
+/*
+#define to_vhost_user_device(ptr, field) \
+    container_of_a(ptr, struct vhost_user, field)
+
+#define virtio_to_vhost_dev(ptr, field) \
+    container_of_a(ptr, struct vhost_dev, field)
+
+*/
+#define to_adapter_device(ptr, field) \
+    container_of(ptr, struct adapter_dev, field)
 
 /* Based on qemu/hw/virtio/vhost-user.c */
 #define VHOST_USER_F_PROTOCOL_FEATURES 30
@@ -912,20 +939,21 @@ bool vu_queue_avail_bytes(VuDev *dev, VuVirtq *vq, unsigned int in_bytes,
 
 bool vhost_user_one_time_request(VhostUserRequest request);
 void vmsg_close_fds(VhostUserMsg *vmsg);
-int vhost_user_set_owner(void);
-int process_message_reply(const VhostUserMsg *msg);
-int vhost_user_get_u64(int request, uint64_t *u64);
-int vhost_user_get_features(uint64_t *features);
-int enforce_reply(const VhostUserMsg *msg);
-int vhost_user_set_u64(int request, uint64_t u64, bool wait_for_reply);
-int vhost_user_set_protocol_features(uint64_t features);
-int vhost_user_get_max_memslots(uint64_t *max_memslots);
+int vhost_user_set_owner(struct vhost_dev *dev);
+int process_message_reply(struct vhost_dev *dev, const VhostUserMsg *msg);
+int vhost_user_get_u64(struct vhost_dev *dev, int request, uint64_t *u64);
+int vhost_user_get_features(struct vhost_dev *dev, uint64_t *features);
+int enforce_reply(struct vhost_dev *dev, const VhostUserMsg *msg);
+int vhost_user_set_u64(struct vhost_dev *dev, int request, uint64_t u64, bool wait_for_reply);
+int vhost_user_set_protocol_features(struct vhost_dev *dev, uint64_t features);
+int vhost_user_get_max_memslots(struct vhost_dev *dev, uint64_t *max_memslots);
 int vhost_setup_slave_channel(struct vhost_dev *dev);
 int vhost_user_get_vq_index(struct vhost_dev *dev, int idx);
-int vhost_set_vring_file(VhostUserRequest request,
-                                struct vhost_vring_file *file);
-int vhost_user_set_vring_kick(struct vhost_vring_file *file);
-int vhost_user_set_vring_call(struct vhost_vring_file *file);
+int vhost_set_vring_file(struct vhost_dev *dev,
+                         VhostUserRequest request,
+                         struct vhost_vring_file *file);
+int vhost_user_set_vring_kick(struct vhost_dev *dev, struct vhost_vring_file *file);
+int vhost_user_set_vring_call(struct vhost_dev *dev, struct vhost_vring_file *file);
 int vhost_virtqueue_init(struct vhost_dev *dev,
                                 struct vhost_virtqueue *vq, int n);
 void vhost_dev_init(struct vhost_dev *vhdev);
@@ -953,7 +981,7 @@ void vhost_commit_vqs(struct vhost_dev *dev);
 void find_add_new_reg(struct vhost_dev *dev);
 void print_mem_table(struct vhost_dev *dev);
 void print_vhost_user_messages(int request);
-
+void vhost_user_dev_class_init(VirtIODevice *vdev);
 
 /* FIXME: This need to move in a better place */
 struct vhost_inflight;
@@ -962,6 +990,5 @@ int vhost_user_get_inflight_fd(struct vhost_dev *dev,
                                struct vhost_inflight *inflight);
 int vhost_user_set_inflight_fd(struct vhost_dev *dev,
                                struct vhost_inflight *inflight);
-
 
 #endif /* LIBVHOST_USER_H */

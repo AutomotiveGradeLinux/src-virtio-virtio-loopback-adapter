@@ -60,7 +60,7 @@ void virtio_rng_set_status(VirtIODevice *vdev, uint8_t status)
 }
 
 /* Send data from a char device over to the guest */
-void chr_read(VirtIORNG *vrng, const void *buf, size_t size)
+void chr_read(VirtIORNG *vrng, const char *buf, size_t size)
 {
     VirtIODevice *vdev = vrng->parent_obj;
     VirtQueueElement *elem;
@@ -129,7 +129,7 @@ void virtio_rng_process(VirtIORNG *vrng)
     size = MIN(vrng->quota_remaining, size);
 
     if (size) {
-        chr_read(vrng, &test_str, size);
+        chr_read(vrng, (const char *)&test_str, size);
     }
 }
 
@@ -158,25 +158,22 @@ void virtio_rng_init(VirtIODevice *vdev)
     virtio_dev_class_init(vdev);
 }
 
-
-void virtio_rng_realize(int queue_num, int queue_size)
+void virtio_rng_realize(struct adapter_dev *adev)
 {
-    (void)queue_num;
-    (void)queue_size;
+    VirtIODevice *vdev = &adev->virtio_dev;
+    VirtIOMMIOProxy *proxy = &adev->proxy;
 
-    /* prepare procy and virtio dev*/
-    proxy = (VirtIOMMIOProxy *)malloc(sizeof(VirtIOMMIOProxy));
+    DBG("virtio_rng_realize(...)\n");
 
-    virtio_dev_init(global_vdev, "virtio-rng", 4, 0);
+    /* Initialize proxy */
+    proxy->legacy = 1;
 
-    virtio_rng_init(global_vdev);
+    virtio_dev_init(vdev, "virtio-rng", 4, 0);
 
-    global_vdev->vq = virtio_add_queue(global_vdev, 8, handle_input);
+    virtio_rng_init(vdev);
 
-    global_vdev->host_features = 0x39000000;
+    vdev->vq = virtio_add_queue(vdev, 8, handle_input);
 
-    *proxy = (VirtIOMMIOProxy) {
-        .legacy = 1,
-    };
+    vdev->host_features = 0x39000000;
 }
 

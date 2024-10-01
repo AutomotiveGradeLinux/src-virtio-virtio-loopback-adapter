@@ -18,8 +18,7 @@
 # Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 
-#CFLAGS := -Wno-unused-variable -Wno-unused-function -D_GNU_SOURCE
-CFLAGS = -D_GNU_SOURCE -O2 -Wall -Wextra -Werror
+CFLAGS := -D_GNU_SOURCE -O2 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function
 
 CC ?=
 
@@ -27,14 +26,29 @@ ifeq ($(ARCH), arm64)
  # arm64
  CC ?= aarch64-linux-gnu-gcc
 else
- CC ?= gcc
+    ifeq ($(ARCH), riscv64)
+     # arm64
+     CC ?= riscv64-linux-gnu-gcc
+    else
+     CC ?= gcc
+    endif
 endif
 
 INCL += -I .
-DEPS = adapter.h vhost_user_loopback.h event_notifier.h virtio_loopback.h
-SRC_C = event_notifier.c vhost_user_loopback.c virtio_loopback.c virtio_rng.c virtio_input.c vhost_user_input.c vhost_user_blk.c vhost_user_rng.c vhost_user_sound.c vhost_user_gpio.c vhost_user_can.c vhost_user_console.c vhost_loopback.c adapter.c
+INCL += -I ./include/
 
+DEPS = adapter.h vhost_user_loopback.h event_notifier.h virtio_loopback.h
+
+# Source directories
+SRC_DIRS = src/adapter src/lib src/common src/lib src/devices
+
+# Source files
+SRC_C = $(foreach dir, $(SRC_DIRS), $(wildcard $(dir)/*.c))
+
+# Object files
 OBJS = $(SRC_C:.c=.o)
+
+# Binary output
 BINS = adapter
 
 ifeq ($(DEBUG), 1)
@@ -43,15 +57,17 @@ endif
 
 all: $(BINS)
 
+# Linking
 $(BINS): $(OBJS)
 	@echo -e "CC\t$@"
 	$(CC) $(CFLAGS) $(INCL) $^ -o $@ -lpthread
 
+# Compilation
 %.o: %.c
 	@echo -e "CC\t$@"
 	$(CC) $(CFLAGS) $(INCL) -c $< -o $@
 
 clean:
-	rm -f *.o *~ $(BINS)
+	rm -f $(OBJS) *~ $(BINS)
 
 .PHONY: all

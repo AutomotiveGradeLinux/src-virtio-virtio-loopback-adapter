@@ -1,12 +1,14 @@
 /*
- * Based on vhost-user-rng of QEMU project
+ * Based on vhost-user-blk.h of QEMU project
  *
- * Copyright (c) 2021 Mathieu Poirier <mathieu.poirier@linaro.org>
+ *   Copyright(C) 2017 Intel Corporation.
+ *
+ *   Authors:
+ *    Changpeng Liu <changpeng.liu@intel.com>
+ *
  *
  * Copyright (c) 2022-2023 Virtual Open Systems SAS.
  *
- * Author:
- *  Timos Ampelikiotis <t.ampelikiotis@virtualopensystems.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,22 +25,35 @@
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
-#ifndef VHOST_USER_RNG
-#define VHOST_USER_RNG
+#ifndef VHOST_USER_BLK
+#define VHOST_USER_BLK
 
 #include "vhost_loopback.h"
-#include "virtio_rng.h"
 #include "vhost_user_loopback.h"
 #include "virtio_loopback.h"
+#include <linux/virtio_blk.h>
 
-typedef struct VHostUserRNG {
+#define TYPE_VHOST_USER_BLK "vhost-user-blk"
+
+#define VHOST_USER_BLK_AUTO_NUM_QUEUES UINT16_MAX
+
+struct VHostUserBlk {
     VirtIODevice *parent;
     struct vhost_virtqueue *vhost_vq;
     struct vhost_dev *vhost_dev;
     VirtQueue *req_vq;
+    VirtQueue **virtqs;
+    uint16_t num_queues;
+    uint32_t queue_size;
+    /* uint32_t config_wce; //We will need it for the next release */
+    uint32_t config_wce;
+    struct vhost_inflight *inflight;
+    struct vhost_virtqueue *vhost_vqs;
+    struct virtio_blk_config blkcfg;
     bool connected;
-} VHostUserRNG;
+    bool started_vu;
+};
 
-void vhost_user_rng_realize(int queue_num, int queue_size);
+void vhost_user_blk_realize(struct adapter_dev *adev);
 
-#endif /* VHOST_USER_RNG */
+#endif /* VHOST_USER_BLK */

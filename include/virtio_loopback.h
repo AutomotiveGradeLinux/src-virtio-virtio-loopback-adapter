@@ -165,7 +165,7 @@
                             sizeof(virtio_device_info_struct_t))
 #define IRQ _IOC(_IOC_WRITE, 'k', 4, sizeof(int))
 #define SHARE_VQS _IOC(_IOC_WRITE, 'k', 5, sizeof(uint32_t))
-#define SHARE_COM_STRUCT _IOC(_IOC_WRITE, 'k', 7, 0)
+#define SHARE_COM_STRUCT _IOC(_IOC_WRITE, 'k', 6, 0)
 
 #define VIRTIO_PCI_VRING_ALIGN         4096
 
@@ -254,13 +254,9 @@ typedef struct VirtIOMMIOProxy {
 #define VRING_DESC_ALIGN_SIZE 16
 /******************/
 
-
 #define container_of(ptr, type, member) ({                      \
         const typeof(((type *) 0)->member) *__mptr = (ptr);     \
         (type *) ((char *) __mptr - offsetof(type, member));})
-
-extern uint64_t vring_phys_addrs[10];
-extern uint32_t vring_phys_addrs_idx;
 
 typedef struct VRing {
     unsigned int num;
@@ -356,7 +352,6 @@ typedef struct VirtQueue {
 } VirtQueue;
 
 typedef struct VirtIORNG VirtIORNG;
-typedef struct VirtIOInput VirtIOInput;
 typedef struct VHostUserRNG VHostUserRNG;
 typedef struct VirtioDeviceClass VirtioDeviceClass;
 typedef struct VHostUserBlk VHostUserBlk;
@@ -382,10 +377,20 @@ typedef struct VirtIODevice {
     void *config;
     uint16_t config_vector;
     uint32_t generation;
+    int last_avail;
+    int prev_level;
+    int int_count;
+    int eventfd_count;
+    int notify_cnt;
+    bool enable_virtio_interrupt;
+    pthread_mutex_t interrupt_lock;
     int nvectors;
     VirtQueue *vq;
     VirtQueue **vqs;
     int *nvqs;
+    /* TODO: Put a defined value for vq num */
+    uint64_t vring_phys_addrs[12];
+    uint32_t vring_phys_addrs_idx;
     uint16_t device_id;
     bool vm_running;
     bool broken; /* device in invalid state, needs reset */
@@ -398,16 +403,17 @@ typedef struct VirtIODevice {
     char *bus_name;
     uint8_t device_endian;
     bool use_guest_notifier_mask;
-    /* TODO: Switch to union? */
-    VirtIORNG *vrng;
-    VirtIOInput *vinput;
-    VHostUserRNG *vhrng;
-    VHostUserBlk *vhublk;
-    VhostUserInput *vhuinput;
-    VHostUserSound *vhusnd;
-    VHostUserGPIO *vhugpio;
-    VHostUserCan *vhucan;
-    VHostUserConsole *vhuconsole;
+    union {
+        VirtIORNG *vrng;
+        VHostUserRNG *vhrng;
+        VHostUserBlk *vhublk;
+        VhostUserInput *vhuinput;
+        VHostUserSound *vhusnd;
+        VHostUserGPIO *vhugpio;
+        VHostUserCan *vhucan;
+        VHostUserConsole *vhuconsole;
+    };
+    const int *user_feature_bits;
 } VirtIODevice;
 
 typedef struct efd_data {
@@ -520,6 +526,7 @@ typedef struct VirtioBus {
     int ioeventfd_grabbed;
 } VirtioBus;
 
+struct adapter_dev;
 
 typedef struct VirtioDeviceClass {
     /*< private >*/
@@ -535,8 +542,10 @@ typedef struct VirtioDeviceClass {
     void (*set_config)(VirtIODevice *vdev, const uint8_t *config);
     void (*reset)(VirtIODevice *vdev);
     void (*set_status)(VirtIODevice *vdev, uint8_t val);
-    void (*realize)(int queue_num, int queue_size);
+    void (*realize)(struct adapter_dev *adev);
     void (*unrealize)(VirtIODevice *vdev);
+    void (*start)(VirtIODevice *vdev);
+    void (*stop)(VirtIODevice *vdev);
     /*
      * For transitional devices, this is a bitmap of features
      * that are only exposed on the legacy interface but not
@@ -578,19 +587,15 @@ typedef struct VirtioDeviceClass {
     struct vhost_dev *(*get_vhost)(VirtIODevice *vdev);
 } VirtioDeviceClass;
 
-/* Global variables */
-extern int fd;
-extern int loopback_fd;
-
 void handle_input(VirtIODevice *vdev, VirtQueue *vq);
 void *my_select(void *data);
 void *wait_read_write(void *data);
 void virtio_notify_config(VirtIODevice *vdev);
-void create_rng_struct(void);
 void print_neg_flag(uint64_t neg_flag, bool read);
-void adapter_read_write_cb(void);
-int virtio_loopback_start(void);
 
+void adapter_read_write_cb(struct adapter_dev *adev);
+int virtio_loopback_start(struct adapter_dev *adev, pthread_t *thread_id);
+void virtio_loopback_stop(struct adapter_dev *adev);
 int virtio_queue_ready(VirtQueue *vq);
 void virtqueue_get_avail_bytes(VirtQueue *vq, unsigned int *in_bytes,
                                unsigned int *out_bytes,
@@ -657,6 +662,8 @@ uint32_t get_vqs_max_size(VirtIODevice *vdev);
 #define VIRTIO_CONFIG_S_DRIVER_OK        4
 #define VIRTIO_F_VERSION_1               32
 #define VIRTIO_F_ACCESS_PLATFORM         33
+#define VIRTIO_F_IN_ORDER                35
+#define VIRTIO_F_NOTIFICATION_DATA       38
 
 /*
  * Legacy name for VIRTIO_F_ACCESS_PLATFORM
@@ -705,10 +712,4 @@ uint32_t get_vqs_max_size(VirtIODevice *vdev);
  */
 #define INIT_PA 0
 
-
-extern VirtIODevice *global_vdev;
-extern VirtIOMMIOProxy *proxy;
-extern VirtioBus *global_vbus;
-
 #endif /* VIRTIO_LOOPBACK */
-

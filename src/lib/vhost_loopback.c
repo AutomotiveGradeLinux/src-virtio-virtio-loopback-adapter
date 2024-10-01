@@ -196,8 +196,6 @@ void vhost_ack_features(struct vhost_dev *hdev, const int *feature_bits,
     }
 }
 
-
-
 /* Mask/unmask events from this vq. */
 void vhost_virtqueue_mask(struct vhost_dev *hdev, VirtIODevice *vdev, int n,
                          bool mask)
@@ -214,7 +212,7 @@ void vhost_virtqueue_mask(struct vhost_dev *hdev, VirtIODevice *vdev, int n,
 
     file.index = vhost_user_get_vq_index(hdev, n);
 
-    r = vhost_user_set_vring_call(&file);
+    r = vhost_user_set_vring_call(hdev, &file);
     if (r < 0) {
         DBG("vhost_set_vring_call failed\n");
     }
@@ -260,10 +258,10 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
     }
 
     vq->desc_size = s = l = virtio_queue_get_desc_size(vdev, idx);
-    vq->desc_phys = vring_phys_addrs[idx] << 12;
+    vq->desc_phys = vdev->vring_phys_addrs[idx] << 12;
     vq->desc = (void *)virtio_queue_get_desc_addr(vdev, idx);
     if (!vq->desc || l != s) {
-        DBG("Error : vq->desc = a\n");
+        DBG("Error : vq->desc\n");
         r = -ENOMEM;
         return r;
     }
@@ -273,7 +271,7 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
                                    - virtio_queue_get_desc_addr(vdev, idx);
     vq->avail = (void *)virtio_queue_get_avail_addr(vdev, idx);
     if (!vq->avail || l != s) {
-        DBG("Error : vq->avail = a\n");
+        DBG("Error : vq->avail\n");
         r = -ENOMEM;
         return r;
     }
@@ -283,14 +281,14 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
                                        - virtio_queue_get_avail_addr(vdev, idx);
     vq->used = (void *)virtio_queue_get_used_addr(vdev, idx);
     if (!vq->used || l != s) {
-        DBG("Error : vq->used = a\n");
+        DBG("Error : vq->used\n");
         r = -ENOMEM;
         return r;
     }
 
     r = vhost_virtqueue_set_addr(dev, vq, vhost_vq_index, dev->log_enabled);
     if (r < 0) {
-        DBG("Fail vhost_virtqueue_set_addr\n");
+        DBG("vhost_virtqueue_set_addr failed\n");
         return r;
     }
 
@@ -299,7 +297,7 @@ static int vhost_virtqueue_start(struct vhost_dev *dev,
     event_notifier_test_and_clear(virtio_queue_get_host_notifier(vvq));
 
     file.fd = event_notifier_get_fd(virtio_queue_get_host_notifier(vvq));
-    r = vhost_user_set_vring_kick(&file);
+    r = vhost_user_set_vring_kick(dev, &file);
     if (r < 0) {
         DBG("vhost_set_vring_kick failed\n");
         return r;
@@ -396,7 +394,6 @@ int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev, bool vrings)
     return 0;
 }
 
-
 int vhost_dev_get_config(struct vhost_dev *hdev, uint8_t *config,
                          uint32_t config_len)
 {
@@ -467,4 +464,3 @@ int vhost_dev_get_inflight(struct vhost_dev *dev, uint16_t queue_size,
 
     return 0;
 }
-

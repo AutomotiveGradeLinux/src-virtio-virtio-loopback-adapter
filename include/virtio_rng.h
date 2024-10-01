@@ -20,6 +20,7 @@
 #define VIRTIO_RNG_DEV
 
 #include "virtio_loopback.h"
+#include "vhost_user_loopback.h"
 
 extern const char test_str[64];
 
@@ -48,8 +49,8 @@ bool is_guest_ready(VirtIORNG *vrng);
 size_t get_request_size(VirtQueue *vq, unsigned quota);
 void virtio_rng_set_status(VirtIODevice *vdev, uint8_t status);
 void virtio_rng_process(VirtIORNG *vrng);
-void chr_read(VirtIORNG *vrng, const void *buf, size_t size);
-void virtio_rng_realize(int queue_num, int queue_size);
+void chr_read(VirtIORNG *vrng, const char *buf, size_t size);
+void virtio_rng_realize(struct adapter_dev *adev);
 void virtio_rng_init(VirtIODevice *vdev);
 
 #endif /* VIRTIO_RNG */

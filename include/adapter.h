@@ -35,19 +35,10 @@
 #include "vhost_user_can.h"
 #include "vhost_user_console.h"
 
-#ifdef DEBUG
-#define DBG(...) printf("adapter: " __VA_ARGS__)
-#else
-#define DBG(...)
-#endif /* DEBUG */
+extern Device devices[MAX_DEVICES];
 
-#define VHU_DEVS 8
-#define ADAPTER_DEVS (VHU_DEVS + 1)
-
-const char *adapter_devices[] = {"vrng", "vhurng", "vhublk", "vhuinput",
-                                 "vhusnd", "vhugpio", "vhucan",
-                                 "vhuconsole" };
-const char *vhu_devices[] = {"vhurng", "vhublk", "vhuinput", "vhusnd",
-                             "vhugpio", "vhucan", "vhuconsole"};
+/* Global functions */
+int parse_args(int argc, char *argv[]);
+void help_args(void);
 
 #endif /* ADAPTER */

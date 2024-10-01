@@ -20,16 +20,6 @@
 #define VIRTIO_CONSOLE_F_MULTIPORT 1   /* Does host provide multiple ports? */
 #define VIRTIO_CONSOLE_F_EMERG_WRITE 2 /* Does host support emergency write? */
 
-/* Some events for control messages */
-#define VIRTIO_CONSOLE_DEVICE_READY 0
-#define VIRTIO_CONSOLE_PORT_ADD 1
-#define VIRTIO_CONSOLE_PORT_REMOVE 2
-#define VIRTIO_CONSOLE_PORT_READY 3
-#define VIRTIO_CONSOLE_CONSOLE_PORT 4
-#define VIRTIO_CONSOLE_RESIZE 5
-#define VIRTIO_CONSOLE_PORT_OPEN 6
-#define VIRTIO_CONSOLE_PORT_NAME 7
-
 struct virtio_console_config {
     /* colums of the screens */
     __virtio16 cols;
@@ -41,16 +31,6 @@ struct virtio_console_config {
     __virtio32 emerg_wr;
 };
 
-/*
- * A message that's passed between the Host and the Guest for a
- * particular port.
- */
-struct virtio_console_control {
-    __virtio32 id;       /* Port number */
-    __virtio16 event;    /* The kind of control event (see below) */
-    __virtio16 value;    /* Extra information for the key */
-};
-
 typedef struct VHostUserConsole {
     VirtIODevice *parent;
     struct vhost_virtqueue *vhost_vqs;
@@ -59,12 +39,8 @@ typedef struct VHostUserConsole {
     uint32_t queue_size;
     struct virtio_console_config config;
     struct vhost_dev *vhost_dev;
-    VirtQueue *rx_vq;
-    VirtQueue *tx_vq;
-    VirtQueue *ctrl_rx_vq;
-    VirtQueue *ctrl_tx_vq;
 } VHostUserConsole;
 
-void vhost_user_console_realize(int queue_num, int queue_size);
+void vhost_user_console_realize(struct adapter_dev *adev);
 
 #endif /* VHOST_USER_CONSOLE */

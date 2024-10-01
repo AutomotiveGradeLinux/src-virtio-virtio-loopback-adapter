@@ -54,6 +54,7 @@
 
 /* Project header files */
 #include "virtio_loopback.h"
+#include "vhost_user_loopback.h"
 #include "virtio_rng.h"
 
 #include <stddef.h>
@@ -65,23 +66,6 @@
 #else
 #define DBG(...)
 #endif /* DEBUG */
-
-/* Global variables */
-
-int s; /* To be deleted */
-int efd; /* Eventfd file descriptor */
-int efd_notify; /* Eventfd file descriptor */
-fd_set rfds;
-int fd;
-int loopback_fd;
-
-virtio_device_info_struct_t device_info;
-virtio_neg_t *address;
-
-VirtIOMMIOProxy *proxy;
-
-int eventfd_count;
-pthread_mutex_t interrupt_lock;
 
 void virtio_add_feature(uint64_t *features, unsigned int fbit)
 {
@@ -122,8 +106,6 @@ bool virtio_device_started(VirtIODevice *vdev, uint8_t status)
 
     return status & VIRTIO_CONFIG_S_DRIVER_OK;
 }
-
-
 void virtio_set_started(VirtIODevice *vdev, bool started)
 {
     if (started) {
@@ -160,7 +142,6 @@ int virtio_set_status(VirtIODevice *vdev, uint8_t val)
     DBG("set vdev->status:%u\n", vdev->status);
 
     if (k->set_status) {
-        DBG("k->set_status\n");
         k->set_status(vdev, val);
     }
 
@@ -194,12 +175,10 @@ uint64_t virtio_queue_get_used_addr(VirtIODevice *vdev, int n)
     return vdev->vq[n].vring.used;
 }
 
-
 int virtio_queue_get_num(VirtIODevice *vdev, int n)
 {
     return vdev->vq[n].vring.num;
 }
-
 
 uint64_t virtio_queue_get_avail_size(VirtIODevice *vdev, int n)
 {
@@ -242,7 +221,6 @@ static uint16_t virtio_queue_split_get_last_avail_idx(VirtIODevice *vdev,
     return vdev->vq[n].last_avail_idx;
 }
 
-
 unsigned int virtio_queue_get_last_avail_idx(VirtIODevice *vdev, int n)
 {
     return virtio_queue_split_get_last_avail_idx(vdev, n);
@@ -267,7 +245,6 @@ uint64_t virtio_queue_get_addr(VirtIODevice *vdev, int n)
     return vdev->vq[n].vring.desc;
 }
 
-
 void virtio_queue_set_addr(VirtIODevice *vdev, int n, uint64_t addr)
 {
     if (!vdev->vq[n].vring.num) {
@@ -281,7 +258,6 @@ int virtio_queue_ready(VirtQueue *vq)
 {
     return vq->vring.avail != 0;
 }
-
 
 uint16_t vring_avail_idx(VirtQueue *vq)
 {
@@ -334,7 +310,6 @@ size_t iov_from_buf_full(const struct iovec *iov, unsigned int iov_cnt,
     return done;
 }
 
-
 size_t qemu_iov_from_buf(const struct iovec *iov, unsigned int iov_cnt,
              size_t offset, const void *buf, size_t bytes)
 {
@@ -346,7 +321,6 @@ size_t qemu_iov_from_buf(const struct iovec *iov, unsigned int iov_cnt,
         return iov_from_buf_full(iov, iov_cnt, offset, buf, bytes);
     }
 }
-
 
 /* Called within rcu_read_lock().  */
 static inline uint16_t vring_avail_flags(VirtQueue *vq)
@@ -366,18 +340,19 @@ static inline uint16_t vring_get_used_event(VirtQueue *vq)
  * we have just incremented index from old to new_idx,
  * should we trigger an event?
  */
-static inline int vring_need_event(uint16_t event_idx,
-                                   uint16_t new_idx, uint16_t old)
-{
-    /*
-     * Note: Xen has similar logic for notification hold-off
-     * in include/xen/interface/io/ring.h with req_event and req_prod
-     * corresponding to event_idx + 1 and new_idx respectively.
-     * Note also that req_event and req_prod in Xen start at 1,
-     * event indexes in virtio start at 0.
-     */
-    return (uint16_t)(new_idx - event_idx - 1) < (uint16_t)(new_idx - old);
-}
+//static inline int vring_need_event(uint16_t event_idx,
+//static int vring_need_event(uint16_t event_idx,
+//                                   uint16_t new_idx, uint16_t old)
+//{
+//    /*
+//     * Note: Xen has similar logic for notification hold-off
+//     * in include/xen/interface/io/ring.h with req_event and req_prod
+//     * corresponding to event_idx + 1 and new_idx respectively.
+//     * Note also that req_event and req_prod in Xen start at 1,
+//     * event indexes in virtio start at 0.
+//     */
+//    return (uint16_t)(new_idx - event_idx - 1) < (uint16_t)(new_idx - old);
+//}
 
 /* Called within rcu_read_lock(). */
 static bool virtio_split_should_notify(VirtIODevice *vdev, VirtQueue *vq)
@@ -407,7 +382,6 @@ static bool virtio_should_notify(VirtIODevice *vdev, VirtQueue *vq)
 {
     return virtio_split_should_notify(vdev, vq);
 }
-
 
 void virtio_set_isr(VirtIODevice *vdev, int value)
 {
@@ -454,7 +428,6 @@ void virtio_notify(VirtIODevice *vdev, VirtQueue *vq)
         DBG("Do not notify!\n");
         return;
     }
-    DBG("Go on and notify!\n");
 
     virtio_irq(vq);
 }
@@ -522,7 +495,6 @@ void virtqueue_push(VirtQueue *vq, const VirtQueueElement *elem,
     virtqueue_fill(vq, elem, len, 0);
     virtqueue_flush(vq, 1);
 }
-
 
 void vring_set_avail_event(VirtQueue *vq, uint16_t val)
 {
@@ -769,7 +741,6 @@ int virtqueue_split_read_next_desc(VirtIODevice *vdev, VRingDesc *desc,
     return VIRTQUEUE_READ_DESC_MORE;
 }
 
-
 static void virtqueue_split_get_avail_bytes(VirtQueue *vq,
                             unsigned int *in_bytes, unsigned int *out_bytes,
                             unsigned max_in_bytes, unsigned max_out_bytes)
@@ -980,7 +951,7 @@ void print_neg_flag(uint64_t neg_flag, bool read)
         if (neg_flag >= VIRTIO_MMIO_CONFIG) {
             DBG("\tVIRTIO_MMIO_CONFIG\n");
         } else {
-            DBG("\tNegotiation flag Unknown: %ld\n", neg_flag);
+            DBG("\tNegotiation flag Unknown: %lu\n", neg_flag);
         }
         return;
     }
@@ -1012,7 +983,6 @@ int virtio_set_features(VirtIODevice *vdev, uint64_t val)
     return ret;
 }
 
-
 /* TODO: MMIO notifiers -- This might not be needed anymore  */
 static void virtio_queue_guest_notifier_read(EventNotifier *n)
 {
@@ -1029,6 +999,7 @@ void *loopback_event_select(void *_e)
     EventNotifier *e = (EventNotifier *)_e;
     int rfd = e->rfd;
     VirtQueue *vq = container_of(e, VirtQueue, guest_notifier);
+    VirtIODevice *vdev = vq->vdev;
 
     DBG("\nWaiting event from vhost-user-device\n");
 
@@ -1043,23 +1014,22 @@ void *loopback_event_select(void *_e)
         }
 
         if (retval > 0) {
-            if (pthread_mutex_lock(&interrupt_lock) != 0) {
+            if (pthread_mutex_lock(&vdev->interrupt_lock) != 0) {
                 printf("[ERROR] Locking failed\n");
                 exit(1);
             }
             DBG("\n\nEvent has come from the vhost-user-device "
                 "(eventfd: %d) -> event_count: %d (select value: %d)\n\n",
-                                              rfd, eventfd_count, retval);
+                                              rfd, vdev->eventfd_count, retval);
 
             if (event_notifier_test_and_clear(e)) {
-                eventfd_count++;
+                vdev->eventfd_count++;
                 virtio_irq(vq);
             }
-            pthread_mutex_unlock(&interrupt_lock);
+            pthread_mutex_unlock(&vdev->interrupt_lock);
         }
     }
 }
-
 
 void event_notifier_set_handler(EventNotifier *e,
                                 void *handler)
@@ -1076,7 +1046,6 @@ void event_notifier_set_handler(EventNotifier *e,
         }
     }
 }
-
 
 void virtio_queue_set_guest_notifier_fd_handler(VirtQueue *vq, bool assign,
                                                 bool with_irqfd)
@@ -1159,11 +1128,11 @@ void virtio_queue_set_host_notifier_enabled(VirtQueue *vq, bool enabled)
 int virtio_bus_set_host_notifier(VirtioBus *vbus, int n, bool assign)
 {
     VirtIODevice *vdev = vbus->vdev;
+    struct adapter_dev *adev = to_adapter_device(vdev, virtio_dev);
     VirtQueue *vq = virtio_get_queue(vdev, n);
 
     EventNotifier *notifier = virtio_queue_get_host_notifier(vq);
     int r = 0;
-
 
     if (!vbus->ioeventfd_assign) {
         return -ENOSYS;
@@ -1175,12 +1144,12 @@ int virtio_bus_set_host_notifier(VirtioBus *vbus, int n, bool assign)
             DBG("unable to init event notifier: %d", r);
             return r;
         }
-        r = vbus->ioeventfd_assign(proxy, notifier, n, true);
+        r = vbus->ioeventfd_assign(&adev->proxy, notifier, n, true);
         if (r < 0) {
             DBG("unable to assign ioeventfd: %d", r);
         }
     } else {
-        vbus->ioeventfd_assign(proxy, notifier, n, false);
+        vbus->ioeventfd_assign(&adev->proxy, notifier, n, false);
     }
 
     if (r == 0) {
@@ -1189,8 +1158,6 @@ int virtio_bus_set_host_notifier(VirtioBus *vbus, int n, bool assign)
 
     return r;
 }
-
-
 
 /* On success, ioeventfd ownership belongs to the caller.  */
 int virtio_bus_grab_ioeventfd(VirtioBus *bus)
@@ -1224,12 +1191,10 @@ bool virtio_device_disabled(VirtIODevice *vdev)
     return vdev->disabled || vdev->broken;
 }
 
-static int prev_level;
-static int int_count;
-
 void virtio_loopback_update_irq(VirtIODevice *vdev)
 {
     int level, irq_num = 44;
+    struct adapter_dev *adev = to_adapter_device(vdev, virtio_dev);
 
     if (!vdev) {
         return;
@@ -1237,23 +1202,18 @@ void virtio_loopback_update_irq(VirtIODevice *vdev)
 
     level = (vdev->isr != 0);
 
-    DBG("level: %d\n", level);
-    DBG("prev_level: %d\n", prev_level);
-
-    if (!((level == 1) && (prev_level == 0))) {
+    if (!((level == 1) && (vdev->prev_level == 0))) {
         DBG("No interrupt\n");
-        prev_level = level;
+        vdev->prev_level = level;
         return;
     }
-    prev_level = level;
+    vdev->prev_level = level;
 
     DBG("Trigger interrupt (ioctl)\n");
-    DBG("Interrupt counter: %d\n", int_count++);
+    DBG("Interrupt counter: %d\n", vdev->int_count++);
 
-    (void) ioctl(fd, IRQ, &irq_num);
+    (void) ioctl(adev->loopback_fd, IRQ, &irq_num);
 }
-
-bool enable_virtio_interrupt;
 
 /* virtio device */
 void virtio_notify_vector(VirtIODevice *vdev)
@@ -1296,7 +1256,6 @@ void virtio_queue_notify(VirtIODevice *vdev, int n)
     if (vq->host_notifier_enabled) {
         event_notifier_set(&vq->host_notifier);
     } else if (vq->handle_output) {
-        DBG("vq->handle_output\n");
         vq->handle_output(vdev, vq);
 
         if (vdev->start_on_kick) {
@@ -1402,13 +1361,12 @@ void virtio_config_writel(VirtIODevice *vdev, uint32_t addr, uint32_t data)
     }
 }
 
-
-
 static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
                                  unsigned size)
 {
 
     uint64_t ret;
+    struct adapter_dev *adev = to_adapter_device(vdev, virtio_dev);
 
     if (!vdev) {
         /*
@@ -1424,7 +1382,7 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
         case VIRTIO_MMIO_MAGIC_VALUE:
             return VIRT_MAGIC;
         case VIRTIO_MMIO_VERSION:
-            if (proxy->legacy) {
+            if (adev->proxy.legacy) {
                 return VIRT_VERSION_LEGACY;
             } else {
                 return VIRT_VERSION;
@@ -1439,7 +1397,7 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
     if (offset >= VIRTIO_MMIO_CONFIG) {
         offset -= VIRTIO_MMIO_CONFIG;
 
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             switch (size) {
             case 1:
                 ret = virtio_config_readb(vdev, offset);
@@ -1451,9 +1409,9 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
                 ret = virtio_config_readl(vdev, offset);
                 break;
             default:
+                DBG("VIRTIO_MMIO_CONFIG abort\n");
                 abort();
             }
-            DBG("ret: %lu\n", ret);
             return ret;
         }
 
@@ -1469,7 +1427,7 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
     case VIRTIO_MMIO_MAGIC_VALUE:
         return VIRT_MAGIC;
     case VIRTIO_MMIO_VERSION:
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             DBG("VIRTIO_MMIO_VERSION -> legacy\n");
             return VIRT_VERSION_LEGACY;
         } else {
@@ -1479,11 +1437,10 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
     case VIRTIO_MMIO_DEVICE_ID:
         return vdev->device_id;
     case VIRTIO_MMIO_VENDOR_ID:
-        DBG("READ\n");
         return VIRT_VENDOR;
     case VIRTIO_MMIO_DEVICE_FEATURES:
-        if (proxy->legacy) {
-            if (proxy->host_features_sel) {
+        if (adev->proxy.legacy) {
+            if (adev->proxy.host_features_sel) {
                 return vdev->host_features >> 32;
             } else {
                 return vdev->host_features & (uint64_t)(((1ULL << 32) - 1));
@@ -1496,16 +1453,16 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
         DBG("Return queue_size = %d\n", vdev->vq[vdev->queue_sel].vring.num);
         return vdev->vq[vdev->queue_sel].vring.num;
     case VIRTIO_MMIO_QUEUE_PFN:
-        if (!proxy->legacy) {
+        if (!adev->proxy.legacy) {
             DBG("VIRTIO_MMIO_QUEUE_PFN: read from legacy register (0x%lx) "
                 "in non-legacy mode\n", offset);
             return 0;
         }
         return virtio_queue_get_addr(vdev, vdev->queue_sel) >>
-                                            proxy->guest_page_shift;
+                                            adev->proxy.guest_page_shift;
 
     case VIRTIO_MMIO_QUEUE_READY:
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             DBG("VIRTIO_MMIO_QUEUE_READY: read from legacy register (0x%lx) "
                 "in non-legacy mode\n", offset);
             return 0;
@@ -1519,7 +1476,7 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
         DBG("Read VIRTIO_MMIO_STATUS: %d\n", vdev->status);
         return vdev->status;
     case VIRTIO_MMIO_CONFIG_GENERATION:
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             DBG("VIRTIO_MMIO_CONFIG_GENERATION: read from legacy "
                 "register (0x%lx) in non-legacy mode\n", offset);
             return 0;
@@ -1558,13 +1515,11 @@ static uint64_t virtio_loopback_read(VirtIODevice *vdev, uint64_t offset,
     return 0;
 }
 
-uint64_t vring_phys_addrs[10] = {0};
-uint32_t vring_phys_addrs_idx;
-static int notify_cnt;
-
 void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
                        uint64_t value, unsigned size)
 {
+    struct adapter_dev *adev = to_adapter_device(vdev, virtio_dev);
+
     if (!vdev) {
         /*
          * If no backend is present, we just make all registers
@@ -1577,7 +1532,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
     if (offset >= VIRTIO_MMIO_CONFIG) {
         offset -= VIRTIO_MMIO_CONFIG;
 
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             switch (size) {
             case 1:
                 virtio_config_writeb(vdev, offset, value);
@@ -1605,14 +1560,14 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
     case VIRTIO_MMIO_DEVICE_FEATURES_SEL:
         DBG("VIRTIO_MMIO_DEVICE_FEATURES_SEL: 0x%lx\n", value);
         if (value) {
-            proxy->host_features_sel = 1;
+            adev->proxy.host_features_sel = 1;
         } else {
-            proxy->host_features_sel = 0;
+            adev->proxy.host_features_sel = 0;
         }
         break;
     case VIRTIO_MMIO_DRIVER_FEATURES:
-        if (proxy->legacy) {
-            if (proxy->guest_features_sel) {
+        if (adev->proxy.legacy) {
+            if (adev->proxy.guest_features_sel) {
                 DBG("Set driver features: 0x%lx\n", value << 32);
                 virtio_set_features(vdev, value << 32);
             } else {
@@ -1625,19 +1580,19 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         break;
     case VIRTIO_MMIO_DRIVER_FEATURES_SEL:
         if (value) {
-            proxy->guest_features_sel = 1;
+            adev->proxy.guest_features_sel = 1;
         } else {
-            proxy->guest_features_sel = 0;
+            adev->proxy.guest_features_sel = 0;
         }
         break;
     case VIRTIO_MMIO_GUEST_PAGE_SIZE:
-        if (!proxy->legacy) {
+        if (!adev->proxy.legacy) {
             DBG("write to legacy register (0x%lx"
                     ") in non-legacy mode\n", offset);
             return;
         }
-        if (proxy->guest_page_shift > 31) {
-            proxy->guest_page_shift = 0;
+        if (adev->proxy.guest_page_shift > 31) {
+            adev->proxy.guest_page_shift = 0;
         }
         break;
     case VIRTIO_MMIO_QUEUE_SEL:
@@ -1650,7 +1605,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
 
         virtio_queue_set_num(vdev, vdev->queue_sel, value);
 
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             virtio_queue_update_rings(vdev, vdev->queue_sel);
         } else {
             /* TODO: To be implemented */
@@ -1658,7 +1613,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         }
         break;
     case VIRTIO_MMIO_QUEUE_ALIGN:
-        if (!proxy->legacy) {
+        if (!adev->proxy.legacy) {
             DBG("write to legacy register (0x%lx) in "
                 "non-legacy mode\n", offset);
             return;
@@ -1666,33 +1621,34 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         /* TODO: To be implemented */
         break;
     case VIRTIO_MMIO_QUEUE_PFN:
-        if (!proxy->legacy) {
+        if (!adev->proxy.legacy) {
             DBG("write to legacy register (0x%lx) in "
                 "non-legacy mode\n", offset);
             return;
         }
         if (value == 0) {
             /* TODO: To be implemented */
+            DBG("Not implemented\n");
         } else {
 
             DBG("desc_addr: 0x%lx\n", value);
-            vring_phys_addrs[vring_phys_addrs_idx++] = value;
+            vdev->vring_phys_addrs[vdev->vring_phys_addrs_idx++] = value;
 
             uint64_t desc_addr;
-            uint32_t vqs_size = get_vqs_max_size(global_vdev);
+            uint32_t vqs_size = get_vqs_max_size(vdev);
 
-            ioctl(fd, SHARE_VQS, &vdev->queue_sel);
+            ioctl(adev->loopback_fd, SHARE_VQS, &vdev->queue_sel);
 
             desc_addr = (uint64_t)mmap(NULL, vqs_size,
                                        PROT_READ | PROT_WRITE,
-                                       MAP_SHARED, fd, 0);
+                                       MAP_SHARED, adev->loopback_fd, 0);
 
             virtio_queue_set_addr(vdev, vdev->queue_sel,
                                   desc_addr);
         }
         break;
     case VIRTIO_MMIO_QUEUE_READY:
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             DBG("write to non-legacy register (0x%lx) in "
                 "legacy mode\n", offset);
             return;
@@ -1701,7 +1657,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         break;
     case VIRTIO_MMIO_QUEUE_NOTIFY:
         DBG("VIRTIO_MMIO_QUEUE_NOTIFY: vq_index -> %lu, notify_cnt: %d\n",
-            value, notify_cnt++);
+            value, vdev->notify_cnt++);
         if (value < VIRTIO_QUEUE_MAX) {
             virtio_queue_notify(vdev, value);
         }
@@ -1716,32 +1672,32 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
          * TODO: Add it in a future release later
          *
          * if (!(value & VIRTIO_CONFIG_S_DRIVER_OK)) {
-         *     virtio_loopback_stop_ioeventfd(proxy);
+         *     virtio_loopback_stop_ioeventfd(adev->proxy);
          * }
          */
 
-        if (!proxy->legacy && (value & VIRTIO_CONFIG_S_FEATURES_OK)) {
+        if (!adev->proxy.legacy && (value & VIRTIO_CONFIG_S_FEATURES_OK)) {
             virtio_set_features(vdev,
-                                ((uint64_t)proxy->guest_features[1]) << 32 |
-                                proxy->guest_features[0]);
+                                ((uint64_t)adev->proxy.guest_features[1]) << 32 |
+                                adev->proxy.guest_features[0]);
         }
 
         virtio_set_status(vdev, value & 0xff);
 
-        DBG("STATUS -> %ld\n", value);
+        DBG("STATUS -> %lu\n", value);
 
         /*
          * TODO: Check if this is still needed
          *
          * if (vdev->status == 0) {
          *     virtio_reset(vdev);
-         *     virtio_loopback_soft_reset(proxy);
+         *     virtio_loopback_soft_reset(adev->proxy);
          * }
          */
 
         break;
     case VIRTIO_MMIO_QUEUE_DESC_LOW:
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             DBG("write to non-legacy register (0x%lx) in "
                 "legacy mode\n", offset);
             return;
@@ -1749,7 +1705,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         /* TODO: To be implemented */
         break;
     case VIRTIO_MMIO_QUEUE_DESC_HIGH:
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             DBG("write to non-legacy register (0x%lx) in "
                 "legacy mode\n", offset);
             return;
@@ -1757,7 +1713,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         /* TODO: To be implemented */
         break;
     case VIRTIO_MMIO_QUEUE_AVAIL_LOW:
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             DBG("write to non-legacy register (0x%lx) in "
                 "legacy mode\n", offset);
             return;
@@ -1765,7 +1721,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         /* TODO: To be implemented */
         break;
     case VIRTIO_MMIO_QUEUE_AVAIL_HIGH:
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             DBG("write to non-legacy register (0x%lx) in "
                 "legacy mode\n", offset);
             return;
@@ -1773,7 +1729,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         /* TODO: To be implemented */
         break;
     case VIRTIO_MMIO_QUEUE_USED_LOW:
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             DBG("write to non-legacy register (0x%lx) in "
                 "legacy mode\n", offset);
             return;
@@ -1781,7 +1737,7 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
         /* TODO: To be implemented */
         break;
     case VIRTIO_MMIO_QUEUE_USED_HIGH:
-        if (proxy->legacy) {
+        if (adev->proxy.legacy) {
             DBG("write to non-legacy register (0x%lx) in "
                 "legacy mode\n", offset);
             return;
@@ -1803,44 +1759,43 @@ void virtio_loopback_write(VirtIODevice *vdev, uint64_t offset,
     }
 }
 
-VirtIODevice *global_vdev;
-VirtioBus *global_vbus;
-
-void adapter_read_write_cb(void)
+void adapter_read_write_cb(struct adapter_dev *adev)
 {
     /*
      * Enabling the next line, all the incoming
      * read/write events will be printed:
      *
-     * print_neg_flag (address->notification, address->read);
+     * print_neg_flag (adev->address->notification, adev->address->read);
      */
-    print_neg_flag(address->notification, address->read);
+    print_neg_flag(adev->address->notification, adev->address->read);
 
-    if (address->read) {
-        address->data = virtio_loopback_read(global_vdev,
-                                         address->notification, address->size);
+    if (adev->address->read) {
+        adev->address->data = virtio_loopback_read(&adev->virtio_dev,
+                                         adev->address->notification, adev->address->size);
     } else {
-        virtio_loopback_write(global_vdev, address->notification,
-                                       address->data, address->size);
+        virtio_loopback_write(&adev->virtio_dev, adev->address->notification,
+                                       adev->address->data, adev->address->size);
     }
 
     DBG("Return to the driver\n");
 
     /*
      * Note the driver that we have done
-     * All the required actions.
+     * all the required actions.
      */
-    (void)ioctl(fd, WAKEUP);
+    (void)ioctl(adev->loopback_fd, WAKEUP);
 
 }
 
 void *driver_event_select(void *data)
 {
-    int retval;
+    int retval, s;
     uint64_t eftd_ctr;
-    int efd = *(int *)data;
+    fd_set rfds;
+    struct adapter_dev *adev = (struct adapter_dev *)data;
+    int efd = adev->efd;
 
-    DBG("\nWaiting for loopback read/write events\n");
+    DBG("\nWaiting for loopback read/write events (efd :%d)\n", efd);
 
     FD_ZERO(&rfds);
     FD_SET(efd, &rfds);
@@ -1859,21 +1814,13 @@ void *driver_event_select(void *data)
                 DBG("\neventfd read error. Exiting...");
                 exit(1);
             } else {
-                adapter_read_write_cb();
+                adapter_read_write_cb(adev);
             }
 
         } else if (retval == 0) {
             DBG("\nselect() says that no data was available");
         }
     }
-}
-
-void create_rng_struct(void)
-{
-    device_info.magic = 0x74726976;
-    device_info.version = 0x1;
-    device_info.device_id = 0x4;
-    device_info.vendor = 0x554d4551;
 }
 
 VirtQueue *virtio_get_queue(VirtIODevice *vdev, int n)
@@ -1910,20 +1857,21 @@ VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
 void virtio_dev_init(VirtIODevice *vdev, const char *name,
                  uint16_t device_id, size_t config_size)
 {
+    struct adapter_dev *adev = to_adapter_device(vdev, virtio_dev);
     int i;
 
     DBG("virtio_dev_init\n");
 
     /* Initialize global variables */
-    prev_level = 0;
-    int_count = 0;
-    eventfd_count = 0;
-    enable_virtio_interrupt = false;
-    vring_phys_addrs_idx = 0;
-    notify_cnt = 0;
+    vdev->prev_level = 0;
+    vdev->int_count = 0;
+    vdev->enable_virtio_interrupt = false;
+    vdev->vring_phys_addrs_idx = 0;
+    vdev->eventfd_count = 0;
+    vdev->notify_cnt = 0;
 
     /* Initialize interrupt mutex */
-    if (pthread_mutex_init(&interrupt_lock, NULL) != 0) {
+    if (pthread_mutex_init(&vdev->interrupt_lock, NULL) != 0) {
         printf("[ERROR] mutex init has failed\n");
         exit(1);
     }
@@ -1932,6 +1880,7 @@ void virtio_dev_init(VirtIODevice *vdev, const char *name,
     vdev->started = false;
     vdev->device_id = device_id;
     vdev->status = 0;
+    vdev->last_avail = -1;
     vdev->queue_sel = 0;
     vdev->config_vector = VIRTIO_NO_VECTOR;
     /* TODO: check malloc return value */
@@ -1953,14 +1902,20 @@ void virtio_dev_init(VirtIODevice *vdev, const char *name,
         vdev->config = NULL;
     }
 
+    /* Initialize device_info */
+    adev->device_info.magic = 0x74726976;
+    adev->device_info.version = 0x1;
+    adev->device_info.device_id = device_id;
+    adev->device_info.vendor = 0x554d4551;
+
     vdev->use_guest_notifier_mask = true;
-    DBG("virtio_dev_init return\n");
 }
 
 static bool virtio_loopback_ioeventfd_enabled(VirtIODevice *d)
 {
-    (void)d;
-    return (proxy->flags & VIRTIO_IOMMIO_FLAG_USE_IOEVENTFD) != 0;
+    struct adapter_dev *adev = to_adapter_device(d, virtio_dev);
+
+    return (adev->proxy.flags & VIRTIO_IOMMIO_FLAG_USE_IOEVENTFD) != 0;
 }
 
 /* TODO: This function might not be needed anymore */
@@ -1992,63 +1947,61 @@ void virtio_loopback_bus_init(VirtioBus *k)
     k->set_guest_notifiers = virtio_loopback_set_guest_notifiers;
     k->ioeventfd_enabled = virtio_loopback_ioeventfd_enabled;
     k->ioeventfd_assign = virtio_loopback_ioeventfd_assign;
-    DBG("virtio_loopback_bus_init(...) return\n");
 }
 
-
-int virtio_loopback_start(void)
+int virtio_loopback_start(struct adapter_dev *adev, pthread_t *thread_id)
 {
     efd_data_t info;
-    pthread_t thread_id;
     int ret = -1;
 
-    fd = open("/dev/loopback", O_RDWR);
-    if (fd < 0) {
+    adev->loopback_fd = open("/dev/loopback", O_RDWR);
+    if (adev->loopback_fd < 0) {
         perror("Open call failed");
         return -1;
     }
-    loopback_fd = fd;
 
     /* Create eventfd */
-    efd = eventfd(0, 0);
-    if (efd == -1) {
+    adev->efd = eventfd(0, 0);
+    if (adev->efd == -1) {
         DBG("\nUnable to create eventfd! Exiting...\n");
         exit(EXIT_FAILURE);
     }
 
     info.pid = getpid();
-    info.efd[0] = efd;
+    info.efd[0] = adev->efd;
 
     /*
      * Send the appropriate information to the driver
      * so to be able to trigger an eventfd
      */
-    (void)ioctl(fd, EFD_INIT, &info);
+    (void)ioctl(adev->loopback_fd, EFD_INIT, &info);
 
     /* Map communication mechanism */
-    (void)ioctl(fd, SHARE_COM_STRUCT);
-    address = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (address == MAP_FAILED) {
+    (void)ioctl(adev->loopback_fd, SHARE_COM_STRUCT);
+    adev->address = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, adev->loopback_fd, 0);
+    if (adev->address == MAP_FAILED) {
         perror("mmap operation failed");
         return -1;
     }
 
     /* Wait the eventfd */
-    ret = pthread_create(&thread_id, NULL, driver_event_select, (void *)&efd);
+    ret = pthread_create(thread_id, NULL, driver_event_select, (void *)adev);
     if (ret != 0) {
-        exit(1);
+        goto error_start;
     }
 
     /* Start loopback transport */
-    (void)ioctl(fd, START_LOOPBACK, &device_info);
+    (void)ioctl(adev->loopback_fd, START_LOOPBACK, &adev->device_info);
 
-    ret = pthread_join(thread_id, NULL);
-    if (ret != 0) {
-        exit(1);
-    }
+error_start:
+    return ret;
+}
 
-    DBG("\nClosing eventfd. Exiting...\n");
-    close(efd);
+void virtio_loopback_stop(struct adapter_dev *adev)
+{
+    DBG("\nClosing eventfd\n");
+    close(adev->efd);
 
-    exit(EXIT_SUCCESS);
+    DBG("\nClosing loopback fd. Exiting...\n");
+    close(adev->loopback_fd);
 }

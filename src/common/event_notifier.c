@@ -80,6 +80,9 @@ void qemu_set_cloexec(int fd)
     int f;
     f = fcntl(fd, F_GETFD);
     f = fcntl(fd, F_SETFD, f | FD_CLOEXEC);
+
+    /* TODO: Check the f value */
+    (void)f;
 }
 
 /*
