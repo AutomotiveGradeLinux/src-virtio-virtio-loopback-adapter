@@ -165,7 +165,7 @@
                             sizeof(virtio_device_info_struct_t))
 #define IRQ _IOC(_IOC_WRITE, 'k', 4, sizeof(int))
 #define SHARE_VQS _IOC(_IOC_WRITE, 'k', 5, sizeof(uint32_t))
-#define SHARE_COM_STRUCT _IOC(_IOC_WRITE, 'k', 6, 0)
+#define SHARE_COM_STRUCT _IOC(_IOC_WRITE, 'k', 7, 0)
 
 #define VIRTIO_PCI_VRING_ALIGN         4096
 
