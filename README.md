@@ -1,16 +1,14 @@
 # virtio-loopback adapter repository
 
-This repository includes the beta version of the "virtio_loopback_adapter" application which is part of the Virtio Loopback Design presented in this [document](https://git.virtualopensystems.com/virtio-loopback/docs/-/blob/master/design_docs). This work carried on by Virtual Open Systems in the [Automotive Grade Linux](https://www.automotivegradelinux.org) community.
+This repository includes the "virtio_loopback_adapter" application which is part of the Virtio-loopback design. If you want to learn more about how to set up and test the whole virtio-loopback architecture, refer to the [virtio-loopback testing guide](https://gerrit.automotivelinux.org/gerrit/gitweb?p=src/virtio/virtio-loopback-adapter.git;a=blob;f=Documentation/testing_virtio_loopback_design.md;hb=HEAD).
 
-As described in the design document, the adapter is only a part of a more complex architecture. If you want to see the implementation and build the other components, refer to the [virtio-loopback docs repository](https://git.virtualopensystems.com/virtio-loopback/docs/-/tree/beta-release).
+This work carried on by Virtual Open Systems in the [Automotive Grade Linux](https://www.automotivegradelinux.org) community.
 
 ## Build the virtio-loopback adapter
 
 In order to build this project the next commands need to be used:
 - `make` for x86
 - `make ARCH=arm64` for arm64
+- `make ARCH=riscv64` for riscv64
 
 **NOTE**: You can also use the parameter "DEBUG=1" in order to enable the debug messages.
-
-Example building the adapter with all the available parameters:
-`make ARCH=arm64 DEBUG=1`
