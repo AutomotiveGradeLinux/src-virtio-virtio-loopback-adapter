@@ -11,7 +11,7 @@
  *   Stefan Hajnoczi <stefanha@linux.vnet.ibm.com>
  *   Nicholas Bellinger <nab@risingtidesystems.com>
  *
- * Copyright (c) 2022-2023 Virtual Open Systems SAS.
+ * Copyright (c) 2022-2024 Virtual Open Systems SAS.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -63,80 +63,6 @@ static const int user_feature_bits[] = {
     VIRTIO_BLK_F_CONFIG_WCE,
     VIRTIO_BLK_F_MQ,
 };
-
-static void vhost_user_blk_start(VirtIODevice *vdev)
-{
-    VHostUserBlk *s = vdev->vhublk;
-    VirtioBus *k = vdev->vbus;
-    unsigned int i;
-    int ret;
-
-    DBG("vhost_user_blk_start\n");
-
-    if (!k->set_guest_notifiers) {
-        DBG("binding does not support guest notifiers\n");
-        goto error;
-    }
-
-    ret = vhost_dev_enable_notifiers(s->vhost_dev, vdev);
-    if (ret < 0) {
-        DBG("Error enabling host notifiers\n");
-        goto error;
-    }
-
-    ret = k->set_guest_notifiers(k->vdev, s->vhost_dev->nvqs, true);
-    if (ret < 0) {
-        DBG("Error enabling host notifier\n");
-        goto error;
-    }
-
-    s->vhost_dev->acked_features = vdev->guest_features;
-    DBG("acked_features: 0x%lx\n", vdev->guest_features);
-
-    /* FIXME: We might do not need that */
-    ret = vhost_dev_prepare_inflight(s->vhost_dev, vdev);
-    if (ret < 0) {
-        DBG("Error setting inflight format\n");
-        goto error;
-    }
-
-    if (!s->inflight->addr) {
-        ret = vhost_dev_get_inflight(s->vhost_dev, s->queue_size, s->inflight);
-        if (ret < 0) {
-            DBG("Error getting inflight\n");
-            goto error;
-        }
-    }
-
-    ret = vhost_dev_set_inflight(s->vhost_dev, s->inflight);
-    if (ret < 0) {
-        DBG("Error setting inflight\n");
-        goto error;
-    }
-
-    ret = vhost_dev_start(s->vhost_dev, vdev, true);
-    if (ret < 0) {
-        DBG("Error starting vhost\n");
-        goto error;
-    }
-
-    s->started_vu = true;
-
-    /*
-     * guest_notifier_mask/pending not used yet, so just unmask
-     * everything here. virtio-pci will do the right thing by
-     * enabling/disabling irqfd.
-     */
-    for (i = 0; i < s->vhost_dev->nvqs; i++) {
-        vhost_virtqueue_mask(s->vhost_dev, vdev, i, false);
-    }
-
-    DBG("vhost_user_blk_start returns successfully\n");
-    return;
-
-error:
-
-}
 
 static int vhost_user_blk_handle_config_change(struct vhost_dev *dev)
 {
@@ -319,7 +245,6 @@ static void vhost_user_dev_class_init_extra(VirtIODevice *vdev)
     DBG("virtio_dev_class_init\n");
 
     vdev->vdev_class->realize = vhost_user_blk_realize;
-    vdev->vdev_class->start = vhost_user_blk_start;
     vdev->vdev_class->get_config = vhost_user_blk_update_config;
     vdev->vdev_class->set_config = vhost_user_blk_set_config;
     vdev->vdev_class->print_config = print_config_blk;

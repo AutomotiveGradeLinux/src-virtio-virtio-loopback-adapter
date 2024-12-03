@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2022 Viresh Kumar <viresh.kumar@linaro.org>
  *
- * Copyright (c) 2023 Virtual Open Systems SAS.
+ * Copyright (c) 2023-2024 Virtual Open Systems SAS.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

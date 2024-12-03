@@ -11,7 +11,7 @@
  *   Authors:
  *    Michael S. Tsirkin <mst@redhat.com>
  *
- * Copyright 2022-2023 Virtual Open Systems SAS.
+ * Copyright 2022-2024 Virtual Open Systems SAS.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -68,6 +68,9 @@
  */
 int vhost_dev_enable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev)
 {
+    struct adapter_dev *adev = to_adapter_device(hdev, vdev);
+    VirtQueue *vq;
+    struct vq_notifier vq_notifier;
     unsigned int i;
     int r;
 
@@ -75,13 +78,6 @@ int vhost_dev_enable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev)
      * We will pass the notifiers to the kernel, make sure that QEMU
      * doesn't interfere.
      */
-
-    /* TODO: Check if this is still useful */
-    r = virtio_device_grab_ioeventfd(vdev);
-    if (r < 0) {
-        DBG("binding does not support host notifiers\n");
-        goto fail;
-    }
 
 
     for (i = 0; i < hdev->nvqs; ++i) {
@@ -91,6 +87,18 @@ int vhost_dev_enable_notifiers(struct vhost_dev *hdev, VirtIODevice *vdev)
             DBG("vhost VQ %d notifier binding failed: %d", i, r);
             goto fail;
         }
+
+        /*
+         * Provide those notifier to the virtio-loopback driver:
+         *
+         * The driver will kick those notifiers without passing
+         * through the adapter anymore.
+         */
+        VirtQueue *vq = virtio_get_queue(vdev, i);
+        vq_notifier.pid = getpid();
+        vq_notifier.vq_index = i;
+        vq_notifier.notifier_fd = virtio_queue_get_host_notifier(vq)->wfd;
+        ioctl(adev->loopback_fd, SHARE_VQS_NOTIF, &vq_notifier);
     }
 
     return 0;

@@ -16,7 +16,7 @@
  *
  *  3) vhost.h of QEMU project
  *
- * Copyright 2022-2023 Virtual Open Systems SAS.
+ * Copyright 2022-2024 Virtual Open Systems SAS.
  *
  * This work is licensed under the terms of the GNU GPL, version 2.  See
  * the COPYING file in the top-level directory.
@@ -165,24 +165,10 @@
                             sizeof(virtio_device_info_struct_t))
 #define IRQ _IOC(_IOC_WRITE, 'k', 4, sizeof(int))
 #define SHARE_VQS _IOC(_IOC_WRITE, 'k', 5, sizeof(uint32_t))
-#define SHARE_COM_STRUCT _IOC(_IOC_WRITE, 'k', 7, 0)
+#define SHARE_COM_STRUCT _IOC(_IOC_WRITE, 'k', 6, 0)
+#define SHARE_VQS_NOTIF _IOC(_IOC_WRITE, 'k', 7, sizeof(struct vq_notifier))
 
 #define VIRTIO_PCI_VRING_ALIGN         4096
-
-typedef struct VirtIOMMIOProxy {
-    /* Generic */
-    bool legacy;
-    uint32_t flags;
-    /* Guest accessible state needing migration and reset */
-    uint32_t host_features_sel;
-    uint32_t guest_features_sel;
-    uint32_t guest_page_shift;
-    /* virtio-bus */
-    bool format_transport_address;
-    /* Fields only used for non-legacy (v2) devices */
-    uint32_t guest_features[2];
-} VirtIOMMIOProxy;
-
 
 /* Vring specific */
 /* This marks a buffer as continuing via the next field. */
@@ -252,11 +238,85 @@ typedef struct VirtIOMMIOProxy {
 #define VRING_AVAIL_ALIGN_SIZE 2
 #define VRING_USED_ALIGN_SIZE 4
 #define VRING_DESC_ALIGN_SIZE 16
+
+/*
+ * Do we get callbacks when the ring is completely used, even if we've
+ * suppressed them?
+ */
+#define VIRTIO_F_NOTIFY_ON_EMPTY         24
+#define VIRTIO_CONFIG_S_FEATURES_OK      8
+#define VIRTIO_CONFIG_S_DRIVER_OK        4
+#define VIRTIO_F_VERSION_1               32
+#define VIRTIO_F_ACCESS_PLATFORM         33
+#define VIRTIO_F_IN_ORDER                35
+#define VIRTIO_F_NOTIFICATION_DATA       38
+
+/*
+ * Legacy name for VIRTIO_F_ACCESS_PLATFORM
+ * (for compatibility with old userspace)
+ */
+#ifndef VIRTIO_F_IOMMU_PLATFORM
+#define VIRTIO_F_IOMMU_PLATFORM          33
+#endif
+
+/* QEMU Aligned functions */
+/*
+ * Round number down to multiple. Safe when m is not a power of 2 (see
+ * ROUND_DOWN for a faster version when a power of 2 is guaranteed).
+ */
+#define QEMU_ALIGN_DOWN(n, m) ((n) / (m) * (m))
+
+/*
+ * Round number up to multiple. Safe when m is not a power of 2 (see
+ * ROUND_UP for a faster version when a power of 2 is guaranteed).
+ */
+#define QEMU_ALIGN_UP(n, m) QEMU_ALIGN_DOWN((n) + (m) - 1, (m))
+
+/* Check if n is a multiple of m */
+#define QEMU_IS_ALIGNED(n, m) (((n) % (m)) == 0)
+
+/* n-byte align pointer down */
+#define QEMU_ALIGN_PTR_DOWN(p, n) \
+    ((typeof(p))QEMU_ALIGN_DOWN((uintptr_t)(p), (n)))
+
+/* n-byte align pointer up */
+#define QEMU_ALIGN_PTR_UP(p, n) \
+    ((typeof(p))QEMU_ALIGN_UP((uintptr_t)(p), (n)))
+
+/* Check if pointer p is n-bytes aligned */
+#define QEMU_PTR_IS_ALIGNED(p, n) QEMU_IS_ALIGNED((uintptr_t)(p), (n))
+
+/*
+ * Define 1 GB offset in order to request big enough
+ * memory blocks from the kernel:
+ * 0x40000000 = 1024 * 1024 * 1024 = 64 * 4096 * 4096 = 1G
+ */
+#define OFFSET_1GB (64ULL * PAGE_SIZE * PAGE_SIZE)
+
+/*
+ * Define starting physical address of host memory address space
+ */
+#define INIT_PA 0
+
 /******************/
 
 #define container_of(ptr, type, member) ({                      \
         const typeof(((type *) 0)->member) *__mptr = (ptr);     \
         (type *) ((char *) __mptr - offsetof(type, member));})
+
+typedef struct VirtIOMMIOProxy {
+    /* Generic */
+    bool legacy;
+    uint32_t flags;
+    /* Guest accessible state needing migration and reset */
+    uint32_t host_features_sel;
+    uint32_t guest_features_sel;
+    uint32_t guest_page_shift;
+    /* virtio-bus */
+    bool format_transport_address;
+    /* Fields only used for non-legacy (v2) devices */
+    uint32_t guest_features[2];
+} VirtIOMMIOProxy;
 
 typedef struct VRing {
     unsigned int num;
@@ -384,6 +444,7 @@ typedef struct VirtIODevice {
     int notify_cnt;
     bool enable_virtio_interrupt;
     pthread_mutex_t interrupt_lock;
+    pthread_mutex_t isr_lock;
     int nvectors;
     VirtQueue *vq;
     VirtQueue **vqs;
@@ -415,6 +476,12 @@ typedef struct VirtIODevice {
     };
     const int *user_feature_bits;
 } VirtIODevice;
+
+struct vq_notifier {
+    uint32_t vq_index;
+    int notifier_fd;
+    int pid;
+};
 
 typedef struct efd_data {
     int efd[2];
@@ -652,64 +719,12 @@ int virtqueue_split_read_next_desc(VirtIODevice *vdev, VRingDesc *desc,
                                    unsigned int max, unsigned int *next);
 void print_config(uint8_t *config);
 uint32_t get_vqs_max_size(VirtIODevice *vdev);
-
-/*
- * Do we get callbacks when the ring is completely used, even if we've
- * suppressed them?
- */
-#define VIRTIO_F_NOTIFY_ON_EMPTY         24
-#define VIRTIO_CONFIG_S_FEATURES_OK      8
-#define VIRTIO_CONFIG_S_DRIVER_OK        4
-#define VIRTIO_F_VERSION_1               32
-#define VIRTIO_F_ACCESS_PLATFORM         33
-#define VIRTIO_F_IN_ORDER                35
-#define VIRTIO_F_NOTIFICATION_DATA       38
-
-/*
- * Legacy name for VIRTIO_F_ACCESS_PLATFORM
- * (for compatibility with old userspace)
- */
-#ifndef VIRTIO_F_IOMMU_PLATFORM
-#define VIRTIO_F_IOMMU_PLATFORM          33
-#endif
-
-/* QEMU Aligned functions */
-/*
- * Round number down to multiple. Safe when m is not a power of 2 (see
- * ROUND_DOWN for a faster version when a power of 2 is guaranteed).
- */
-#define QEMU_ALIGN_DOWN(n, m) ((n) / (m) * (m))
-
-/*
- * Round number up to multiple. Safe when m is not a power of 2 (see
- * ROUND_UP for a faster version when a power of 2 is guaranteed).
- */
-#define QEMU_ALIGN_UP(n, m) QEMU_ALIGN_DOWN((n) + (m) - 1, (m))
-
-/* Check if n is a multiple of m */
-#define QEMU_IS_ALIGNED(n, m) (((n) % (m)) == 0)
-
-/* n-byte align pointer down */
-#define QEMU_ALIGN_PTR_DOWN(p, n) \
-    ((typeof(p))QEMU_ALIGN_DOWN((uintptr_t)(p), (n)))
-
-/* n-byte align pointer up */
-#define QEMU_ALIGN_PTR_UP(p, n) \
-    ((typeof(p))QEMU_ALIGN_UP((uintptr_t)(p), (n)))
-
-/* Check if pointer p is n-bytes aligned */
-#define QEMU_PTR_IS_ALIGNED(p, n) QEMU_IS_ALIGNED((uintptr_t)(p), (n))
-
-/*
- * Define 1 GB offset in order to request big enough
- * memory blocks from the kernel:
- * 0x40000000 = 1024 * 1024 * 1024 = 64 * 4096 * 4096 = 1G
- */
-#define OFFSET_1GB (64ULL * PAGE_SIZE * PAGE_SIZE)
-
-/*
- * Define starting physical address of host memory address space
- */
-#define INIT_PA 0
+int virtio_set_status(VirtIODevice *vdev, uint8_t val);
+void virtio_queue_update_rings(VirtIODevice *vdev, int n);
+void virtio_queue_set_num(VirtIODevice *vdev, int n, int num);
+bool virtio_split_should_notify(VirtIODevice *vdev, VirtQueue *vq);
+uint64_t virtio_queue_get_addr(VirtIODevice *vdev, int n);
+void virtio_queue_set_addr(VirtIODevice *vdev, int n, uint64_t addr);
+void virtio_set_started(VirtIODevice *vdev, bool started);
 
 #endif /* VIRTIO_LOOPBACK */
