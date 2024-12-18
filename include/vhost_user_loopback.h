@@ -239,6 +239,9 @@ typedef struct Device {
     int device_index;
     int requires_socket;
     int client_socket;
+    bool priority_enabled;
+    int credits;
+    int priority_group;
 } Device;
 
 typedef struct adapter_dev {

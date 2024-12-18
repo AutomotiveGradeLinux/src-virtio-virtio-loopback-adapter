@@ -1107,6 +1107,9 @@ void virtio_dev_init(VirtIODevice *vdev, const char *name,
     adev->device_info.version = 0x1;
     adev->device_info.device_id = device_id;
     adev->device_info.vendor = 0x554d4551;
+    adev->device_info.priority_enabled = adev->device_params->priority_enabled;
+    adev->device_info.credits = (unsigned long)adev->device_params->credits;
+    adev->device_info.priority_group = (unsigned long)adev->device_params->priority_group;
 
     vdev->use_guest_notifier_mask = true;
 }

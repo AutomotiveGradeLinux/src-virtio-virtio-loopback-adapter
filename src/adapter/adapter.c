@@ -123,7 +123,7 @@ static void client(Device *device)
     len = sizeof(client_sockaddr);
     rc = connect(device->client_socket, (struct sockaddr *) &client_sockaddr, len);
     if (rc == -1) {
-        printf("CONNECT ERROR: Check the \"-s\" parameter\n");
+        printf("CONNECT ERROR: Check the \"socket\" parameter: %s\n", sock_path);
         close(device->client_socket);
         exit(1);
     }

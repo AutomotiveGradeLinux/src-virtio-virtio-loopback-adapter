@@ -493,9 +493,10 @@ typedef struct virtio_device_info_struct {
     unsigned long version;
     unsigned long device_id;
     unsigned long vendor;
-
+    bool priority_enabled;      
+    unsigned long credits;
+    unsigned long priority_group;
 } virtio_device_info_struct_t;
-
 
 /* Negotiation structs */
 
