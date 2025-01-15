@@ -12,3 +12,7 @@ In order to build this project the next commands need to be used:
 - `make ARCH=riscv64` for riscv64
 
 **NOTE**: You can also use the parameter "DEBUG=1" in order to enable the debug messages.
+
+## License
+
+This project is licensed under the terms of the GNU General Public License (GPL), version 2 or (at your option) any later version. See the [COPYING](COPYING) file for details.
