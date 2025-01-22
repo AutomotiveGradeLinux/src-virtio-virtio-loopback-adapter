@@ -1171,7 +1171,6 @@ int vhost_user_set_mem_table(struct vhost_dev *dev)
     bool config_mem_slots =
         virtio_has_feature(dev->protocol_features,
                            VHOST_USER_PROTOCOL_F_CONFIGURE_MEM_SLOTS);
-    //struct vhost_user *u = to_vhost_user_device(dev, dev);
     struct vhost_user *u = dev->vhudev;
     bool do_postcopy = false;
 
@@ -1356,8 +1355,6 @@ void vhost_commit_init_vqs(struct vhost_dev *dev)
 {
     size_t regions_size;
     unsigned int i;
-    //struct adapter_dev *adev = to_adapter_device(dev, vdev);
-    //VirtIODevice *vdev = &adev->virtio_dev;
     VirtIODevice *vdev = dev->vdev;
 
     dev->n_mem_sections = dev->nvqs;
@@ -1390,18 +1387,11 @@ void vhost_commit_mem_regions(struct vhost_dev *dev)
     uint64_t mmap_pa_req;
     int i;
 
-    /* Create and add all ram memory regions */
-    for (i = 0; i < VHOST_USER_MAX_RAM_SLOTS; i++) {
+    /* Add bouncing buffer region */
+    vhost_add_reg(dev, 0x0, 2 * OFFSET_1GB);
 
-        /* Calculate new Physical Address */
-        mmap_pa_req = INIT_PA + i * 1 * OFFSET_1GB;
-
-        /* Add a new region */
-        vhost_add_reg(dev, mmap_pa_req, 1 * OFFSET_1GB);
-    }
-
-   /* Send new region */
-   if (vhost_user_set_mem_table(dev) < 0) {
+    /* Send new region */
+    if (vhost_user_set_mem_table(dev) < 0) {
         DBG("vhost_user_set_mem_table -> Error\n");
         exit(1);
    }
@@ -1885,7 +1875,6 @@ static void vhost_user_device_get_config(VirtIODevice *vdev, uint8_t *config)
         DBG("vhost_input_get_config failed\n");
         return;
     }
-    //memcpy(config, vdev->config, vdev->config_len);
 }
 
 static void vhost_user_device_start(VirtIODevice *vdev)
