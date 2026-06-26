@@ -127,7 +127,7 @@ void vu_gpio_device_realize(struct adapter_dev *adev)
 
 
     vdev->vhugpio->vhost_vqs = (struct vhost_virtqueue *)
-                                malloc(sizeof(struct vhost_virtqueue *));
+	    malloc(sizeof(struct vhost_virtqueue) * vdev->vhugpio->num_queues);
     if (!vdev->vhugpio->vhost_vqs) {
         DBG("vhost_vqs memory allocation failed\n");
         goto out_with_dev;
